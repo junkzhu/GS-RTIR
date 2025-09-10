@@ -18,8 +18,8 @@ PRIMAL_SPP_MULT = 4
 
 #--------------training--------------
 BATCH_SIZE = 6
-NITER = 200
-OPTIMIZE_PARAMS = ['shape.sh_coeffs']
+NITER = 512
+OPTIMIZE_PARAMS = ['shape.normals','shape.albedos','shape.roughnesses']
 RENDER_UPSAMPLE_ITER = [64, 128, 256]
 
 

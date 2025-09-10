@@ -27,28 +27,98 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             self.primal_image = sensor.film().develop()
 
             #extra aovs
-            self.extra_images = []
-            for _aov in _aovs:
-                sensor.film().clear()
-                extra_block = sensor.film().create_block() 
-                extra_block.set_coalesce(extra_block.coalesce() and spp >= 4)
-                
-                assert dr.shape(_aov)[0]==3, f"Unexpected number of channels: {dr.shape(_aov)[0]}, expected 3"
-                
-                aovs = [None]*3
-                aovs[0] = _aov[0]
-                aovs[1] = _aov[1]
-                aovs[2] = _aov[2]
-                extra_block.put(pos, ray.wavelengths, aovs * weight)
+            self.extra_images = {}
+            for aov_name, aov_value in _aovs.items():
+                if(dr.shape(aov_value)[0]==3):
+                    sensor.film().clear()
+                    extra_block = sensor.film().create_block() 
+                    extra_block.set_coalesce(extra_block.coalesce() and spp >= 4)
+                    
+                    aovs = [None]*3
+                    aovs[0] = aov_value[0]
+                    aovs[1] = aov_value[1]
+                    aovs[2] = aov_value[2]
+                    extra_block.put(pos, ray.wavelengths, aovs * weight)
 
-                sensor.film().put_block(extra_block)
-                current_image = sensor.film().develop()
-                self.extra_images.append(current_image)
+                    sensor.film().put_block(extra_block)
+                    current_image = sensor.film().develop()
+
+                    self.extra_images[aov_name] = current_image
 
             del sampler, ray, weight, pos, L, valid, _aovs, alpha
             gc.collect()
 
             return self.primal_image, self.extra_images
+
+    def render_backward(self, scene, params, grad_in, sensor=0, seed=0, spp=0):
+        if isinstance(sensor, int):
+            sensor = scene.sensors()[sensor]
+        
+        film = sensor.film()
+        aovs = self.aovs()
+
+        with dr.suspend_grad():
+            sampler, spp = self.prepare(sensor, seed, spp, aovs)
+            ray, weight, pos, det = self.sample_rays(scene, sensor, sampler)
+
+            L, valid, state_out = self.sample(
+                mode=dr.ADMode.Primal, scene=scene, sampler=sampler.clone(), ray=ray, depth=mi.UInt32(0), 
+                δL=None, δA=None, δR=None, δM=None, δD=None, δN=None, 
+                state_in=None, reparam=None, active=mi.Bool(True))
+            
+            albedo_state_out = state_out['albedo']
+            roughness_state_out = state_out['roughness']
+            metallic_state_out = state_out['metallic']
+            depth_state_out = state_out['depth']
+            normal_state_out = state_out['normal']
+
+            with dr.resume_grad():
+                film.clear()
+                dr.enable_grad(L)
+                block = film.create_block()
+                block.set_coalesce(block.coalesce() and spp >= 4)
+                block.put(pos=pos, wavelengths=ray.wavelengths,
+                        value=L * weight * det, weight=det, alpha=dr.select(valid, mi.Float(1), mi.Float(0)))
+                film.put_block(block)
+                dr.schedule(L, block.tensor())
+                color_image = film.develop()
+                dr.set_grad(color_image, grad_in[0])
+                dr.enqueue(dr.ADMode.Backward, color_image)
+
+                for data_name, extra_data in zip(['albedo', 'roughness', 'metallic', 'depth', 'normal'], [albedo_state_out, roughness_state_out, metallic_state_out, depth_state_out, normal_state_out]):
+                    film.clear()
+                    dr.enable_grad(extra_data)
+                    extra_block = film.create_block()
+                    extra_block.set_coalesce(extra_block.coalesce() and spp >= 4)
+                    extra_block.put(pos, ray.wavelengths, extra_data)
+                    dr.schedule(extra_data, extra_block.tensor())
+                    film.put_block(extra_block)
+                    extra_image = film.develop() 
+                    dr.set_grad(extra_image, grad_in[1][data_name])
+                    dr.enqueue(dr.ADMode.Backward, extra_image)
+                
+                dr.traverse(dr.ADMode.Backward)
+                δL = dr.grad(L)                     # ∂loss/∂L
+                δA = dr.grad(albedo_state_out) 
+                δR = dr.grad(roughness_state_out) 
+                δM = dr.grad(metallic_state_out) 
+                δD = dr.grad(depth_state_out)
+                δN = dr.grad(normal_state_out)
+
+            # Launch Monte Carlo sampling in backward AD mode (2)
+            L_2, valid_2, state_out_2 = self.sample(
+                mode=dr.ADMode.Backward, scene=scene, sampler=sampler,
+                ray=ray, depth=mi.UInt32(0), δL=δL, δA=δA, δR=δR, δM=δM, δD=δD, δN=δN,
+                state_in=state_out, active=mi.Bool(True))
+
+            # We don't need any of the outputs here
+            del L_2, valid_2, state_out, state_out_2, δL, δA, δR, δM, δD, δN, ray, weight, pos, block, extra_block, sampler
+
+            gc.collect()
+
+            # Run kernel representing side effects of the above
+            dr.eval()
+
 
     @dr.syntax
     def ray_marching_loop(self, mode, scene, sampler, primal, ray, δL, δA, δR, δM, δD, δN, state_in, active):
@@ -58,12 +128,12 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
         ray = mi.Ray3f(dr.detach(ray)) #clone a new ray
 
-        A = mi.Spectrum(0.0 if primal else state_in[0])
-        R = mi.Float(0.0 if primal else state_in[1][0])
-        M = mi.Float(0.0 if primal else state_in[2][0])
-        D = mi.Float(0.0 if primal else state_in[3][0])
-        N = mi.Spectrum(0.0 if primal else state_in[4])
-        weight_acc = mi.Float(0.0 if primal else state_in[5][0])
+        A = mi.Spectrum(0.0 if primal else state_in['albedo'])
+        R = mi.Float(0.0 if primal else state_in['roughness'][0])
+        M = mi.Float(0.0 if primal else state_in['metallic'][0])
+        D = mi.Float(0.0 if primal else state_in['depth'][0])
+        N = mi.Spectrum(0.0 if primal else state_in['normal'])
+        weight_acc = mi.Float(0.0 if primal else state_in['weight_acc'][0])
 
         δA = mi.Spectrum(δA if δA is not None else 0)
         δR = mi.Spectrum(δR if δR is not None else 0)
@@ -74,23 +144,27 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         β = mi.Spectrum(1.0) #for rgb
         T = mi.Float(1.0) #for aovs
 
-        # with dr.resume_grad(when=not primal):
-        #     if not primal:
-        #         dr.enable_grad(A)
-        #         dr.enable_grad(R)
-        #         dr.enable_grad(N)
-        #         #dr.enable_grad(M)
+        with dr.resume_grad(when=not primal):
+            if not primal:
+                Vdirection = state_in['Vdirection']
+                Ldirection = state_in['Ldirection']
+                Halfvector = dr.normalize(Ldirection + Vdirection) 
 
-        #         cosθ = dr.clamp(dr.dot(N, Ldirection), 1e-6, 1.0)
-        #         BSDF = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
-        #         BSDF = BSDF * cosθ
+                dr.enable_grad(A)
+                dr.enable_grad(R)
+                dr.enable_grad(N)
+                #dr.enable_grad(M)
 
-        #         dr.backward_from(BSDF)
+                cosθ = dr.clamp(dr.dot(N, Ldirection), 1e-6, 1.0)
+                BSDF = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
+                BSDF = BSDF * cosθ
+
+                dr.backward_from(BSDF)
                 
-        #         δA = δL * dr.grad(A) + δA 
-        #         δR = δL * dr.grad(R)
-        #         #δM = δL * dr.grad(M)
-        #         δN = δL * dr.grad(N) + δN
+                δA = δL * dr.grad(A) + δA 
+                δR = δL * dr.grad(R)
+                #δM = δL * dr.grad(M)
+                δN = δL * dr.grad(N) + δN
 
         depth_acc = mi.Float(0.0)
         while dr.hint(active, label=f"BSDF ray tracing"):
@@ -190,7 +264,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         D = D / dr.maximum(weight_acc, 1e-8)
         N = dr.normalize(N)
         
-        return A, R, M, D, N, (T < 0.9)
+        return A, R, M, D, N, (T < 0.9) , weight_acc
 
     @dr.syntax
     def sample(self, mode, scene, sampler, ray, δL, δA, δR, δM, δD, δN, state_in, active, **kwargs):
@@ -200,13 +274,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         active = mi.Mask(active)
         result = mi.Spectrum(0.0)
 
-        A, R, M, D, N, active = self.ray_marching_loop(mode, scene, sampler, primal, ray, δL, δA, δR, δM, δD, δN, state_in, active)
-
-        aovs = [dr.select(active, A, 0.0), 
-                dr.select(active, mi.Spectrum(R), 0.0),
-                dr.select(active, mi.Spectrum(M), 0.0), 
-                dr.select(active, mi.Spectrum(D), 0.0), 
-                dr.select(active, N, 0.0)]
+        A, R, M, D, N, active, weight_acc = self.ray_marching_loop(mode, scene, sampler, primal, ray, δL, δA, δR, δM, δD, δN, state_in, active)
 
         #create a new si as gaussian intersection
         si = dr.zeros(mi.SurfaceInteraction3f)
@@ -252,6 +320,19 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         #output
         nee_contrib = visibility * BSDF * emitter_val
         result[active] = nee_contrib
+
+        #aov & state_out
+        aovs = {
+            'albedo': dr.select(active, A, 0.0),
+            'roughness': dr.select(active, mi.Spectrum(R), 0.0),
+            'metallic': dr.select(active, mi.Spectrum(M), 0.0),
+            'depth': dr.select(active, mi.Spectrum(D), 0.0),
+            'normal': dr.select(active, N, 0.0),
+            
+            'weight_acc': dr.select(active, weight_acc, 0.0),
+            'Vdirection': dr.select(active, Vdirection, 0.0),
+            'Ldirection': dr.select(active, Ldirection, 0.0)
+        }
 
         return mi.Spectrum(result), True, aovs
 

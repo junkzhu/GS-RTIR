@@ -75,11 +75,11 @@ if __name__ == "__main__":
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
 
             #aovs
-            albedo_img = aovs[0][:, :, :3]
-            roughness_img = aovs[1][:, :, :1]
-            metallic_img = aovs[2][:, :, :1]
-            depth_img = aovs[3][:, :, :1]
-            normal_img = aovs[4][:, :, :3]
+            albedo_img = aovs['albedo'][:, :, :3]
+            roughness_img = aovs['roughness'][:, :, :1]
+            metallic_img = aovs['metallic'][:, :, :1]
+            depth_img = aovs['depth'][:, :, :1]
+            normal_img = aovs['normal'][:, :, :3]
 
             view_loss = l1(img, ref_img) / dataset.batch_size
 
@@ -94,7 +94,7 @@ if __name__ == "__main__":
 
             total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss
 
-            #dr.backward(total_loss)
+            dr.backward(total_loss)
 
             loss += total_loss
 
@@ -115,8 +115,8 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 
-        #opt.step()
-        #params.update(opt)
+        opt.step()
+        params.update(opt)
 
         dataset.update_sensors(i)
 
