@@ -1,0 +1,11 @@
+
+/.vscode
+/.vs
+
+__pycache__
+*.pyc
+
+outputs
+
+*.pth
+*.ply
