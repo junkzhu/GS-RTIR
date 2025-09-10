@@ -59,13 +59,19 @@ if __name__ == "__main__":
         dr.enable_grad(param)
     opt = mi.ad.Adam(lr=0.01, params=params)
 
+    seed = 0
+
     pbar = tqdm.tqdm(range(NITER))
     for i in pbar:
         loss = mi.Float(0.0)
         
         for idx, sensor in dataset.get_sensor_iterator(i):
-            img, aovs = mi.render(scene_dict, sensor=sensor, params=params, spp=SPP, seed=idx)
+            img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
+                                  spp=SPP * PRIMAL_SPP_MULT, spp_grad=SPP,
+                                  seed=seed, seed_grad=seed+1+len(dataset.sensors))
             
+            seed += 1 + len(dataset.sensors)
+
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
 
             #aovs
@@ -75,14 +81,31 @@ if __name__ == "__main__":
             depth_img = aovs[3][:, :, :1]
             normal_img = aovs[4][:, :, :3]
 
-            #save the results
+            view_loss = l1(img, ref_img) / dataset.batch_size
+
+            #loss follow GS-IR
+            view_tv_loss = TV(dr.concat([albedo_img, roughness_img, metallic_img], axis=2), ref_img) / dataset.batch_size
+            lamb_loss = dr.mean(1.0-roughness_img) + dr.mean(metallic_img)
+
+            #convert depth to fake_normal
+            fake_normal_img = convert_depth_to_normal(depth_img, sensor)
+            normal_loss = lnormal(normal_img, fake_normal_img) / dataset.batch_size
+            normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
+
+            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss
+
+            #dr.backward(total_loss)
+
+            loss += total_loss
+
+            #----------------------------------save the results----------------------------------
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
             rgb_ref_bmp = resize_img(mi.Bitmap(ref_img),dataset.target_res)
             albedo_bmp = resize_img(mi.Bitmap(albedo_img), dataset.target_res)
             roughness_bmp = resize_img(mi.Bitmap(roughness_img), dataset.target_res)
             metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
             depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
-            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where((depth_img > 0), (normal_img+1)/2, 0))), dataset.target_res) 
+            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where((normal_img != 0), (normal_img+1)/2, 0))), dataset.target_res) 
 
             mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}' + ('.png')), rgb_bmp)
             mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}_ref' + ('.png')), rgb_ref_bmp)
@@ -90,13 +113,7 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_roughness' + ('.png')), roughness_bmp)
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_metallic' + ('.png')), metallic_bmp)
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
-            mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)
-
-            view_loss = l1(img, ref_img) / dataset.batch_size
-
-            #dr.backward(view_loss)
-
-            loss += view_loss
+            mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 
         #opt.step()
         #params.update(opt)

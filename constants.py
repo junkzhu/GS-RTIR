@@ -13,6 +13,7 @@ ENVMAP_PATH = 'D:/dataset/sunset.hdr'
 #INTEGRATOR = 'volprim_rf_basic'
 INTEGRATOR = 'gsprim_rf'
 SPP = 32
+PRIMAL_SPP_MULT = 4
 
 
 #--------------training--------------
