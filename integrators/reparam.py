@@ -240,6 +240,10 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return G1V * G1L
 
     def eval_bsdf(self, albedo, roughness, metallic, N, V, L, H):
+        albedo = dr.clamp(albedo, 0.0, 1.0)
+        roughness = dr.clamp(roughness, 0.1, 0.9)
+        metallic = dr.clamp(metallic, 0.1, 0.9)
+        
         NdotL = dr.clamp(dr.dot(N, L), 0.0, 1.0)
         NdotV = dr.clamp(dr.dot(N, V), 0.0, 1.0)
         NdotH = dr.clamp(dr.dot(N, H), 0.0, 1.0)

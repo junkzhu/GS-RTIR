@@ -36,7 +36,7 @@ if __name__ == "__main__":
         'integrator': {
             'type': INTEGRATOR,
             'max_depth': 128,
-            'hide_emitters': False
+            'hide_emitters': True
         },
         'shape': {
             'type': 'ellipsoidsmesh',
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     for _, param in params.items():
         dr.enable_grad(param)
     opt = mi.ad.Adam(lr=0.01, params=params)
-
+    #opt.set_learning_rate({'shape.normals':0.01})
     seed = 0
 
     pbar = tqdm.tqdm(range(NITER))

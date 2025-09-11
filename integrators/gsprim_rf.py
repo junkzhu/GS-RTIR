@@ -107,8 +107,8 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
             # Launch Monte Carlo sampling in backward AD mode (2)
             L_2, valid_2, state_out_2 = self.sample(
-                mode=dr.ADMode.Backward, scene=scene, sampler=sampler,
-                ray=ray, depth=mi.UInt32(0), δL=δL, δA=δA, δR=δR, δM=δM, δD=δD, δN=δN,
+                mode=dr.ADMode.Backward, scene=scene, sampler=sampler, ray=ray, depth=mi.UInt32(0), 
+                δL=δL, δA=δA, δR=δR, δM=δM, δD=δD, δN=δN,
                 state_in=state_out, active=mi.Bool(True))
 
             # We don't need any of the outputs here
