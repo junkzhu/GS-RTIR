@@ -119,32 +119,25 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return ray, weight, pos_f, det
 
     @dr.syntax
-    def ray_test(self, scene, sampler, ray, active, threshold = 1e-3):
-        
+    def ray_test(self, scene, sampler, ray, active, threshold = 0.4):
+        #Stochastic Ray Tracing of Transparent 3D Gaussians, 3.3 section
         active=mi.Mask(active)
         original_active = mi.Mask(active)
         ray = mi.Ray3f(dr.detach(ray))
     
         T = mi.Float(1.0)
-
         while dr.hint(active, label=f"Shadow ray test"):
             si_cur = scene.ray_intersect(ray)
             active &= si_cur.is_valid() & si_cur.shape.is_ellipsoids()
                         
             transmission = self.eval_transmission(si_cur, ray, active)
+            alpha = 1.0 - transmission # opacity as a probability
             T[active] *= transmission
+
+            random_value = sampler.next_1d()
+            active &= random_value < (1 - alpha)
             ray.o[active] = si_cur.p + ray.d * 1e-4
 
-            active &= T > threshold
-
-            #TODO:增加俄罗斯轮盘赌加速
-            # sample_rr = sampler.next_1d()
-            # rr_prob = dr.maximum(T, 0.1)
-            # rr_active = T < 0.1
-            # T[rr_active] *= dr.rcp(rr_prob)
-            # rr_continue = sample_rr < rr_prob
-            # active &= ~rr_active | rr_continue
-        
         occluded = T < threshold
 
         return occluded & original_active

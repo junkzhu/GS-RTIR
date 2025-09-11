@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image
 from utils import resize_img
 
-def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='test', env='sunset', normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
+def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
     #-------------------------SENSORS------------------------
     sensors = []
     sampler = mi.load_dict({'type': 'independent'})
