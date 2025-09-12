@@ -2,6 +2,8 @@ import gc
 import drjit as dr
 import mitsuba as mi
 
+from mitsuba.ad.integrators.common import mis_weight
+
 from .reparam import ReparamIntegrator
 
 class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
@@ -287,15 +289,16 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
         #visualize the emitter
         if not self.hide_emitters:
-            result += si.emitter(scene).eval(si) 
+            result += dr.select(~active, si.emitter(scene, ~active).eval(si, ~active), 0.0)
         
-        #-----------eval emitter-----------
+        # ---------------------- Emitter sampling ----------------------
+        active_e = active
         with dr.suspend_grad():
-            ds, _ = scene.sample_emitter_direction(si, sampler.next_2d(active), False, active)
-            active &= (ds.pdf != 0.0)
+            ds, _ = scene.sample_emitter_direction(si, sampler.next_2d(active_e), False, active)
+            active_e &= (ds.pdf != 0.0)
             shadow_ray = si.spawn_ray_to(ds.p)
 
-            occluded = self.ray_test(scene, sampler, shadow_ray, active)
+            occluded = self.ray_test(scene, sampler, shadow_ray, active_e)
 
             si_e = dr.zeros(mi.SurfaceInteraction3f)
             si_e.sh_frame.n = ds.n
@@ -303,14 +306,14 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             si_e.n = si_e.sh_frame.n
             si_e.wi = -shadow_ray.d
             si_e.wavelengths = ray.wavelengths
-            emitter_val = dr.select(active, ds.emitter.eval(si_e, active), 0.0)
+            emitter_val = dr.select(active_e, ds.emitter.eval(si_e, active_e), 0.0)
 
             emitter_val = dr.select(ds.pdf > 0, emitter_val / ds.pdf, 0.0)
             visibility = dr.select(~occluded, 1.0, 0.0)
 
         #-----------eval bsdf-----------
-        Ldirection = shadow_ray.d # view direction (outgoing)
-        Vdirection = dr.normalize(-ray.d) # light direction (incoming)
+        Ldirection = shadow_ray.d #light direction (incoming)
+        Vdirection = dr.normalize(-ray.d) #view direction (outgoing) 
         Halfvector = dr.normalize(Ldirection + Vdirection) # half-vector
 
         cosθ = dr.clamp(dr.dot(N, Ldirection), 1e-6, 1.0)
@@ -319,7 +322,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         
         #output
         nee_contrib = visibility * BSDF * emitter_val
-        result[active] = nee_contrib
+        result[active] += nee_contrib
 
         #aov & state_out
         aovs = {

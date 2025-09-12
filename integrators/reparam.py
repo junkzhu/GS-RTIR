@@ -233,6 +233,9 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return G1V * G1L
 
     def eval_bsdf(self, albedo, roughness, metallic, N, V, L, H):
+        """
+        Evaluate BSDF Value
+        """
         albedo = dr.clamp(albedo, 0.0, 1.0)
         roughness = dr.clamp(roughness, 0.1, 0.9)
         metallic = dr.clamp(metallic, 0.1, 0.9)
@@ -267,3 +270,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         return bsdf_val
     
+    def pdf_bsdf(self, albedo, roughness, metallic, N, V, L, H):
+        return 0
+
+    def sample_bsdf(self, roughness, metallic):
+        return 0
