@@ -11,6 +11,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         super().__init__(props)
         self.max_depth = props.get('max_depth', 4)
         self.hide_emitters = props.get('hide_emitters', False)
+        self.use_mis = props.get('use_mis', False)
     
     def prepare(self, sensor, seed, spp, aovs=[]):
         film = sensor.film()
@@ -236,10 +237,6 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         """
         Evaluate BSDF Value
         """
-        albedo = dr.clamp(albedo, 0.0, 1.0)
-        roughness = dr.clamp(roughness, 0.1, 0.9)
-        metallic = dr.clamp(metallic, 0.1, 0.9)
-        
         NdotL = dr.clamp(dr.dot(N, L), 0.0, 1.0)
         NdotV = dr.clamp(dr.dot(N, V), 0.0, 1.0)
         NdotH = dr.clamp(dr.dot(N, H), 0.0, 1.0)
@@ -267,11 +264,65 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         diffuse = (1.0 - metallic) * (albedo / PI) * (1.0 - F_avg)
 
         bsdf_val = specular + diffuse
-
-        return bsdf_val
+        cosθ = dr.clamp(dr.dot(N, L), 1e-6, 1.0)
+        return bsdf_val * cosθ
     
-    def pdf_bsdf(self, albedo, roughness, metallic, N, V, L, H):
-        return 0
+    def sample_bsdf(self, sampler, si, albedo, roughness, metallic, N, V):
+        """
+        Sample BSDF direction (Disney simplified: Diffuse + GGX Specular)
+        Returns: (L, bsdf_over_pdf)
+        """
+        # randoms
+        r1 = sampler.next_1d()
+        r2 = sampler.next_1d()
 
-    def sample_bsdf(self, roughness, metallic):
-        return 0
+        # Fresnel base reflectivity
+        F0_dielectric = mi.Color3f(0.04)
+        F0 = dr.lerp(F0_dielectric, albedo, metallic)
+
+        # mixture weight: how much goes to diffuse vs specular
+        diffuse_prob = (1.0 - metallic) * 0.5   # heuristic
+        specular_prob = 1.0 - diffuse_prob
+
+        # decide which lobe to sample
+        choose_specular = (r1 < specular_prob)
+
+        # --- Specular branch -----
+        u1_spec = r1 / (specular_prob + 1e-8)
+        u2_spec = r2
+
+        a = roughness * roughness
+        phi_spec = 2.0 * dr.pi * u1_spec
+        cos_theta_spec = dr.sqrt((1.0 - u2_spec) / (1.0 + (a*a - 1.0) * u2_spec))
+        sin_theta_spec = dr.sqrt(dr.maximum(0.0, 1.0 - cos_theta_spec * cos_theta_spec))
+
+        H_tangent = mi.Vector3f(sin_theta_spec * dr.cos(phi_spec),
+                                sin_theta_spec * dr.sin(phi_spec),
+                                cos_theta_spec)
+        H_spec = si.to_world(H_tangent)
+        L_spec = dr.normalize(2.0 * dr.dot(V, H_spec) * H_spec - V)
+
+        D_spec    = self.ggx_D(N, H_spec, roughness)
+        pdf_Hspec = D_spec * dr.dot(N, H_spec)
+        pdf_spec  = pdf_Hspec / (4.0 * dr.dot(V, H_spec) + 1e-8)
+
+        # --- Diffuse branch ------
+        u1_diff = (r1 - specular_prob) / (diffuse_prob + 1e-8)
+        u2_diff = r2
+
+        phi_diff = 2.0 * dr.pi * u1_diff
+        cos_theta_diff = dr.sqrt(1.0 - u2_diff)
+        sin_theta_diff = dr.sqrt(u2_diff)
+
+        L_tangent = mi.Vector3f(sin_theta_diff * dr.cos(phi_diff),
+                                sin_theta_diff * dr.sin(phi_diff),
+                                cos_theta_diff)
+        L_diff = si.to_world(L_tangent)
+
+        pdf_diff = dr.dot(N, L_diff) / dr.pi
+
+        # --- Merge branches ------
+        dir   = dr.select(choose_specular, L_spec, L_diff)
+        pdf = dr.select(choose_specular, pdf_spec, pdf_diff)
+
+        return dir, pdf

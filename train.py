@@ -36,7 +36,8 @@ if __name__ == "__main__":
         'integrator': {
             'type': INTEGRATOR,
             'max_depth': 128,
-            'hide_emitters': True
+            'hide_emitters': True,
+            'use_mis': True
         },
         'shape': {
             'type': 'ellipsoidsmesh',
