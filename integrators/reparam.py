@@ -288,6 +288,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         Input: V_world (view dir in world space, pointing away from surface)
         Output: L_world (sampled direction in world space), pdf
         """
+        #TODO: 当法线未收敛时，存在V和N反向的可能性，会出现预期之外的错误。（复现方法 GS法线属性初始化为(0,0,-1)）
+
         # Local coordinates
         V = dr.normalize(si.to_local(V_world))
         N = mi.Vector3f(0.0, 0.0, 1.0) # local normal
