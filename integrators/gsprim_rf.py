@@ -311,11 +311,10 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             bsdf_pdf = dr.zeros(mi.Float)
 
             if self.use_mis:
-                bsdf_val = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
-                _, bsdf_pdf = self.sample_bsdf(sampler, si, R, M, Vdirection)
+                bsdf_val, bsdf_pdf = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
                 nee_contrib = visibility * bsdf_val * emitter_val * mis_weight(ds.pdf, dr.detach(bsdf_pdf))
             else:
-                bsdf_val = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
+                bsdf_val, _ = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
                 nee_contrib = visibility * bsdf_val * emitter_val
 
             result[active] += nee_contrib
@@ -333,7 +332,8 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
                     emitter_pdf = scene.pdf_emitter_direction(si, ds, active_bsdf)
                 
-                bsdf_val = self.eval_bsdf(A, R, M, N, Vdirection, bs_dir, dr.normalize(bs_dir + Vdirection))
+                Halfvector = dr.normalize(bs_dir + Vdirection)
+                bsdf_val, _ = self.eval_bsdf(A, R, M, N, Vdirection, bs_dir, Halfvector)
                 shadow_ray = si.spawn_ray(bs_dir)
                 occluded = self.ray_test(scene, sampler, shadow_ray, active_bsdf)
                 visibility = dr.select(~occluded, 1.0, 0.0)

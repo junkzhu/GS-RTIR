@@ -266,7 +266,21 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         bsdf_val = specular + diffuse
         cosθ = dr.clamp(dr.dot(N, L), 1e-6, 1.0)
-        return bsdf_val * cosθ
+        bsdf_val = bsdf_val * cosθ
+
+        # ---------- PDF ----------
+        diffuse_prob  = (1.0 - metallic) * 0.5
+        specular_prob = 1.0 - diffuse_prob
+        #Sepcular
+        pdf_H = D * NdotH
+        pdf_spec = pdf_H / (4.0 * dr.maximum(1e-4, VdotH))
+        #Diffuse
+        cosθ = dr.dot(N, L)
+        pdf_diff = dr.select(cosθ > 0, cosθ * dr.rcp(dr.pi), 0.0)
+
+        bsdf_pdf = specular_prob * pdf_spec + diffuse_prob * pdf_diff
+
+        return bsdf_val, bsdf_pdf
     
     def sample_bsdf(self, sampler, si, roughness, metallic, V_world):
         """
@@ -288,7 +302,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         choose_specular = (r1 < specular_prob)
 
         # ---------- Specular (GGX half vector sampling, GGX NDF) ----------
-        u1_spec = r1 / (specular_prob + 1e-8)
+        u1_spec = r1
         u2_spec = r2
         alpha = roughness * roughness
 
@@ -308,7 +322,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         pdf_spec = pdf_H / (4.0 * dr.maximum(1e-4, VdotH))
 
         # ---------- Diffuse (cosine-weighted hemisphere) ----------
-        u1_diff = (r1 - specular_prob) / (diffuse_prob + 1e-8)
+        u1_diff = r1
         u2_diff = r2
 
         phi = 2.0 * dr.pi * u1_diff
