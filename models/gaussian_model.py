@@ -105,4 +105,5 @@ class GaussianModel:
         self._rotation = torch.from_numpy(rots)
         self._features_dc = torch.from_numpy(features_dc)
         self._features_rest = torch.from_numpy(features_rest) 
-        self._normal = torch.ones((xyz.shape[0], 3))
+        self._normal = torch.zeros((xyz.shape[0], 3))
+        self._normal[:, 2] = 1.0

@@ -18,13 +18,14 @@ class Dataset:
 
         self.sensors = {}
         self.ref_images = {}
+        self.ref_albedo_images = {}
 
         self.target_res = [800,800]
 
         if os.path.exists(os.path.join(source_path, "sparse")):
             assert(1==2) #TODO COLMAP
         elif os.path.exists(os.path.join(source_path, "transforms_train.json")):
-            self.sensors, self.ref_images = sceneLoadTypeCallbacks["Blender"](
+            self.sensors, self.ref_images, self.ref_albedo_images = sceneLoadTypeCallbacks["Blender"](
                 source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1]
             )
 

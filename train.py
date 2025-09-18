@@ -59,7 +59,7 @@ if __name__ == "__main__":
     for _, param in params.items():
         dr.enable_grad(param)
     opt = mi.ad.Adam(lr=0.01, params=params)
-    #opt.set_learning_rate({'shape.normals':0.01})
+    opt.set_learning_rate({'shape.opacities':0.001})
     seed = 0
 
     pbar = tqdm.tqdm(range(NITER))
@@ -74,6 +74,7 @@ if __name__ == "__main__":
             seed += 1 + len(dataset.sensors)
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
+            ref_albedo_img = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
 
             #aovs
             albedo_img = aovs['albedo'][:, :, :3]
@@ -83,6 +84,7 @@ if __name__ == "__main__":
             normal_img = aovs['normal'][:, :, :3]
 
             view_loss = l1(img, ref_img) / dataset.batch_size
+            albedo_loss = l1(albedo_img, ref_albedo_img) / dataset.batch_size
 
             #loss follow GS-IR
             view_tv_loss = TV(dr.concat([albedo_img, roughness_img, metallic_img], axis=2), ref_img) / dataset.batch_size
@@ -93,7 +95,7 @@ if __name__ == "__main__":
             normal_loss = lnormal(normal_img, fake_normal_img) / dataset.batch_size
             normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
 
-            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss
+            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss + albedo_loss
 
             dr.backward(total_loss)
 

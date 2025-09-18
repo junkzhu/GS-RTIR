@@ -14,7 +14,7 @@ class EllipsoidsFactory:
         self.roughnesses = []
         self.metallics = []
 
-    def add(self, mean, scale, sigmat=1.0, albedo=[0.5, 0.5, 0.5], quaternion=[0.0, 0.0, 0.0, 0.0], normal=[0.0, 0.0, 0.0], roughness = 0.8, metallic = 0.0, feature=np.zeros((16, 3))):
+    def add(self, mean, scale, sigmat=1.0, albedo=[0.5, 0.5, 0.5], quaternion=[0.0, 0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0], roughness = 0.8, metallic = 0.0, feature=np.zeros((16, 3))):
         sigmat = 1 / (1 + np.exp(-sigmat))
         sigmat = np.clip(sigmat, 1e-8, 1.0 - 1e-8)
         scale = np.exp(scale)

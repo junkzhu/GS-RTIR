@@ -312,7 +312,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
             if self.use_mis:
                 bsdf_val = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
-                _, bsdf_pdf = self.sample_bsdf(sampler, si, A, R, M, N, Vdirection)
+                _, bsdf_pdf = self.sample_bsdf(sampler, si, R, M, Vdirection)
                 nee_contrib = visibility * bsdf_val * emitter_val * mis_weight(ds.pdf, dr.detach(bsdf_pdf))
             else:
                 bsdf_val = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
@@ -323,14 +323,12 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             # ---------------------- BSDF sampling ----------------------
             if self.use_mis:
                 with dr.suspend_grad():
-                    bs_dir, bs_pdf = self.sample_bsdf(sampler, si, A, R, M, N, Vdirection)
+                    bs_dir, bs_pdf = self.sample_bsdf(sampler, si, R, M, Vdirection)
                     active_bsdf = active & (bs_pdf > 0.0)
 
                     ds = dr.zeros(mi.DirectionSample3f)
                     ds.d = bs_dir
-                    ds.p = si.p + bs_dir
                     ds.dist = dr.inf
-                    ds.delta = False
                     ds.emitter = scene.emitters()[0]
 
                     emitter_pdf = scene.pdf_emitter_direction(si, ds, active_bsdf)

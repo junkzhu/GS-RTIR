@@ -120,28 +120,29 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return ray, weight, pos_f, det
 
     @dr.syntax
-    def ray_test(self, scene, sampler, ray, active, threshold = 0.4):
+    def ray_test(self, scene, sampler, ray, active):
         #Stochastic Ray Tracing of Transparent 3D Gaussians, 3.3 section
         active=mi.Mask(active)
-        original_active = mi.Mask(active)
         ray = mi.Ray3f(dr.detach(ray))
     
-        T = mi.Float(1.0)
-        while dr.hint(active, label=f"Shadow ray test"):
+        occluded = mi.Bool(False)
+        while dr.hint(active, label=f"Shadow Ray Test"):
             si_cur = scene.ray_intersect(ray)
             active &= si_cur.is_valid() & si_cur.shape.is_ellipsoids()
-                        
+
+            NdotV = dr.dot(si_cur.sh_frame.n, -ray.d)
+            self_occ = NdotV < 0 #self-occlusion
+
             transmission = self.eval_transmission(si_cur, ray, active)
             alpha = 1.0 - transmission # opacity as a probability
-            T[active] *= transmission
 
-            random_value = sampler.next_1d()
-            active &= random_value < (1 - alpha)
+            rand = sampler.next_1d()
+            hit_occluded = rand < alpha
+            occluded[active & hit_occluded & ~self_occ] = mi.Bool(True)
+            active = active & ((~hit_occluded) | (hit_occluded & self_occ)) 
             ray.o[active] = si_cur.p + ray.d * 1e-4
 
-        occluded = T < threshold
-
-        return occluded & original_active
+        return occluded
 
     #-------------------- 3DGS --------------------
     def eval_transmission(self, si, ray, active):
@@ -267,62 +268,64 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         cosθ = dr.clamp(dr.dot(N, L), 1e-6, 1.0)
         return bsdf_val * cosθ
     
-    def sample_bsdf(self, sampler, si, albedo, roughness, metallic, N, V):
+    def sample_bsdf(self, sampler, si, roughness, metallic, V_world):
         """
         Sample BSDF direction (Disney simplified: Diffuse + GGX Specular)
-        Returns: (L, bsdf_over_pdf)
+        Input: V_world (view dir in world space, pointing away from surface)
+        Output: L_world (sampled direction in world space), pdf
         """
+        # Local coordinates
+        V = dr.normalize(si.to_local(V_world))
+        N = mi.Vector3f(0.0, 0.0, 1.0) # local normal
+
         # randoms
         r1 = sampler.next_1d()
         r2 = sampler.next_1d()
 
-        # Fresnel base reflectivity
-        F0_dielectric = mi.Color3f(0.04)
-        F0 = dr.lerp(F0_dielectric, albedo, metallic)
-
-        # mixture weight: how much goes to diffuse vs specular
-        diffuse_prob = (1.0 - metallic) * 0.5   # heuristic
+        # mixture weight
+        diffuse_prob  = (1.0 - metallic) * 0.5
         specular_prob = 1.0 - diffuse_prob
-
-        # decide which lobe to sample
         choose_specular = (r1 < specular_prob)
 
-        # --- Specular branch -----
+        # ---------- Specular (GGX half vector sampling, GGX NDF) ----------
         u1_spec = r1 / (specular_prob + 1e-8)
         u2_spec = r2
+        alpha = roughness * roughness
 
-        a = roughness * roughness
-        phi_spec = 2.0 * dr.pi * u1_spec
-        cos_theta_spec = dr.sqrt((1.0 - u2_spec) / (1.0 + (a*a - 1.0) * u2_spec))
-        sin_theta_spec = dr.sqrt(dr.maximum(0.0, 1.0 - cos_theta_spec * cos_theta_spec))
+        phi_h = 2.0 * dr.pi * u1_spec
+        cos_theta_h = dr.sqrt((1.0 - u2_spec) / (1.0 + (alpha * alpha - 1.0) * u2_spec))
+        sin_theta_h = dr.sqrt(dr.maximum(0.0, 1.0 - cos_theta_h * cos_theta_h))
+        H = mi.Vector3f(sin_theta_h * dr.cos(phi_h),
+                        sin_theta_h * dr.sin(phi_h),
+                        cos_theta_h)
 
-        H_tangent = mi.Vector3f(sin_theta_spec * dr.cos(phi_spec),
-                                sin_theta_spec * dr.sin(phi_spec),
-                                cos_theta_spec)
-        H_spec = si.to_world(H_tangent)
-        L_spec = dr.normalize(2.0 * dr.dot(V, H_spec) * H_spec - V)
+        VdotH = dr.dot(V, H)
+        L_spec = dr.normalize(2.0 * VdotH * H - V)
 
-        D_spec    = self.ggx_D(N, H_spec, roughness)
-        pdf_Hspec = D_spec * dr.dot(N, H_spec)
-        pdf_spec  = pdf_Hspec / (4.0 * dr.dot(V, H_spec) + 1e-8)
+        NdotH = dr.clamp(H.z, 0.0, 1.0)
+        D = self.ggx_D(N, H, roughness)
+        pdf_H = D * dr.maximum(0.0, NdotH)
+        pdf_spec = pdf_H / (4.0 * dr.maximum(1e-4, VdotH))
 
-        # --- Diffuse branch ------
+        # ---------- Diffuse (cosine-weighted hemisphere) ----------
         u1_diff = (r1 - specular_prob) / (diffuse_prob + 1e-8)
         u2_diff = r2
 
-        phi_diff = 2.0 * dr.pi * u1_diff
-        cos_theta_diff = dr.sqrt(1.0 - u2_diff)
-        sin_theta_diff = dr.sqrt(u2_diff)
+        phi = 2.0 * dr.pi * u1_diff
+        cos_theta = dr.sqrt(1.0 - u2_diff)
+        sin_theta = dr.sqrt(u2_diff)
+        L_diff = mi.Vector3f(sin_theta * dr.cos(phi),
+                            sin_theta * dr.sin(phi),
+                            cos_theta)
 
-        L_tangent = mi.Vector3f(sin_theta_diff * dr.cos(phi_diff),
-                                sin_theta_diff * dr.sin(phi_diff),
-                                cos_theta_diff)
-        L_diff = si.to_world(L_tangent)
-
-        pdf_diff = dr.dot(N, L_diff) / dr.pi
+        pdf_diff = cos_theta / dr.pi
 
         # --- Merge branches ------
-        dir   = dr.select(choose_specular, L_spec, L_diff)
-        pdf = dr.select(choose_specular, pdf_spec, pdf_diff)
+        L_local   = dr.select(choose_specular, L_spec, L_diff)
+        pdf = specular_prob * pdf_spec + diffuse_prob * pdf_diff
+        #pdf = dr.select(choose_specular, pdf_spec, pdf_diff)
 
-        return dir, pdf
+        # To world
+        L_world = si.to_world(L_local)
+        return L_world, pdf
+
