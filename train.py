@@ -108,7 +108,8 @@ if __name__ == "__main__":
             roughness_bmp = resize_img(mi.Bitmap(roughness_img), dataset.target_res)
             metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
             depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
-            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where((normal_img != 0), (normal_img+1)/2, 0))), dataset.target_res) 
+            normal_mask = np.any(normal_img != 0, axis=2, keepdims=True)
+            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, normal_img, 0))), dataset.target_res) 
 
             mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}' + ('.png')), rgb_bmp)
             mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}_ref' + ('.png')), rgb_ref_bmp)

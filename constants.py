@@ -5,7 +5,7 @@ import os
 #--------------dataset--------------
 DATASET_PATH = 'D:/dataset/hotdog'
 
-PLY_PATH = 'D:/dataset/hotdog/point_cloud.ply'
+PLY_PATH = 'D:/dataset/point_cloud.ply'
 ENVMAP_PATH = 'D:/dataset/sunset.hdr'
 
 
