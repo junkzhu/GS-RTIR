@@ -64,7 +64,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             ray, weight, pos, det = self.sample_rays(scene, sensor, sampler)
 
             L, valid, state_out, gradients = self.sample(
-                mode=dr.ADMode.Forward, scene=scene, sampler=sampler.clone(), ray=ray, depth=mi.UInt32(0), 
+                mode=dr.ADMode.Forward, scene=scene, sampler=sampler, ray=ray, depth=mi.UInt32(0), 
                 δL=None, δA=None, δR=None, δM=None, δD=None, δN=None, 
                 state_in=None, reparam=None, active=mi.Bool(True))
             
@@ -112,7 +112,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 δR = δL * gradients['roughness'] + δR
                 δM = δL * gradients['metallic'] + δM
                 δD = δL * gradients['depth'] + δD
-                δN = δL * gradients['normal'] + δN
+                δN = δN
 
             # Launch Monte Carlo sampling in backward AD mode (2)
             L_2, valid_2, state_out_2, _= self.sample(
@@ -201,6 +201,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             T[active] *= transmission
 
             ray.o[active] = si_cur.p + ray.d * 1e-4
+            depth_acc[active] += 1e-4
 
             with dr.resume_grad(when=not primal):
                 if not primal:
@@ -233,19 +234,19 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             active &= β_max > 0.01
             active &= num < self.max_depth
 
-            sample_rr = sampler.next_1d() # Ensures the same sequence of random number is drawn for the primal and adjoint passes.
-            if primal and num >= 10:
-                rr_prob = dr.maximum(β_max, 0.1)
-                rr_active = β_max < 0.1
-                β[rr_active] *= dr.rcp(rr_prob)
-                rr_continue = sample_rr < rr_prob
-                active &= ~rr_active | rr_continue
+            # sample_rr = sampler.next_1d() # Ensures the same sequence of random number is drawn for the primal and adjoint passes.
+            # if primal and num >= 10:
+            #     rr_prob = dr.maximum(β_max, 0.1)
+            #     rr_active = β_max < 0.1
+            #     β[rr_active] *= dr.rcp(rr_prob)
+            #     rr_continue = sample_rr < rr_prob
+            #     active &= ~rr_active | rr_continue
 
         D = D / dr.maximum(weight_acc, 1e-8)
         N = dr.normalize(N)
         
         A = dr.clamp(A, 0.0, 1.0)
-        R = dr.clamp(R, 0.0, 1.0)
+        R = dr.clamp(R, 0.05, 1.0)
         M = dr.clamp(M, 0.0, 1.0)
 
         return A, R, M, D, N, (T < 0.9) , weight_acc
@@ -275,7 +276,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             si.initialize_sh_frame() 
             si.n = si.sh_frame.n
             si.wi = -ray.d
-            si.p = ray.o + ray.d * D
+            si.p = ray.o + 0.995 * ray.d * D
             si.wavelengths = ray.wavelengths
 
             #visualize the emitter

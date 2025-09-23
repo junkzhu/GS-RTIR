@@ -120,7 +120,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         """Load bitmap as float32 and apply gamma correction"""
         img = np.array(Image.open(fn)).astype(np.float32) / 255.0  # Normalize to [0, 1]
         
-        # Apply gamma correction (sRGB → linear)
+        # Apply inverse gamma correction (sRGB → linear)
         if bsrgb2linear:
             img = srgb_to_linear(img)
         
@@ -151,6 +151,21 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
             d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
         ref_albedo_images.append(d)
 
-    return sensors, ref_images, ref_albedo_images
+    normal_paths = [path.replace('rgba_sunset.png', 'normal.png') for path in image_paths]
+    ref_normal_images=[]
+    for idx, fn in enumerate(normal_paths):
+        bmp = load_bitmap(fn, False)
+        bmp = mi.TensorXf(bmp)
+        bmp = bmp * 2.0 - 1.0
+        bmp = mi.Bitmap(bmp)
+
+        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
+        new_res = bmp.size()
+        while np.min(new_res) > 4:
+            new_res = new_res // 2
+            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+        ref_normal_images.append(d)
+
+    return sensors, ref_images, ref_albedo_images, ref_normal_images
 
 sceneLoadTypeCallbacks = {"Blender": read_nerf_synthetic}

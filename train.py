@@ -75,6 +75,7 @@ if __name__ == "__main__":
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
             ref_albedo_img = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
+            ref_normal_img = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
 
             #aovs
             albedo_img = aovs['albedo'][:, :, :3]
@@ -92,7 +93,7 @@ if __name__ == "__main__":
 
             #convert depth to fake_normal
             fake_normal_img = convert_depth_to_normal(depth_img, sensor)
-            normal_loss = lnormal(normal_img, fake_normal_img) / dataset.batch_size
+            normal_loss = lnormal(normal_img, ref_normal_img) / dataset.batch_size
             normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
 
             total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss + albedo_loss
@@ -106,8 +107,11 @@ if __name__ == "__main__":
             rgb_ref_bmp = resize_img(mi.Bitmap(ref_img),dataset.target_res)
             albedo_bmp = resize_img(mi.Bitmap(albedo_img), dataset.target_res)
             roughness_bmp = resize_img(mi.Bitmap(roughness_img), dataset.target_res)
-            metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
+            #metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
             depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
+
+            fake_normal_mask = np.any(ref_normal_img != 0, axis=2, keepdims=True)
+            metallic_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(fake_normal_mask, ref_normal_img, 0))), dataset.target_res) 
             normal_mask = np.any(normal_img != 0, axis=2, keepdims=True)
             normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, normal_img, 0))), dataset.target_res) 
 
