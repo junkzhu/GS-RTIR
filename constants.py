@@ -23,6 +23,7 @@ NITER = 512
 OPTIMIZE_PARAMS = ['shape.opacities', 'shape.normals','shape.albedos','shape.roughnesses']
 RENDER_UPSAMPLE_ITER = [64, 128, 256]
 
+REFINE_NITER = 428
 REFINE_PARAMS = ['shape.opacities', 'shape.normals', 'shape.sh_coeffs', 'shape.data']
 
 

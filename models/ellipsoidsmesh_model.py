@@ -82,7 +82,7 @@ class EllipsoidsFactory:
                 scale=scale.tolist(),
                 sigmat=float(opacity.item()),
                 quaternion=rot.tolist(),
-                feature=np.concatenate((feature * 0.0, feature_rest * 0.0), axis=0).tolist(),
+                feature=np.concatenate((feature, feature_rest), axis=0).tolist(),
                 
                 normal=normal.tolist(),
             )

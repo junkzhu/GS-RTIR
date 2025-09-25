@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     seed = 0
 
-    pbar = tqdm.tqdm(range(NITER))
+    pbar = tqdm.tqdm(range(REFINE_NITER))
     for i in pbar:
         loss = mi.Float(0.0)
         
