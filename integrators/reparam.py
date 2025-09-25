@@ -145,6 +145,26 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return occluded
 
     #-------------------- 3DGS --------------------
+    def eval_sh_emission(self, si, ray, active):
+        """
+        Evaluate the SH directionally emission on intersected volumetric primitives
+        """
+        def eval(shape, si, ray, active):
+            if shape is not None and shape.is_ellipsoids():
+                sh_coeffs = shape.eval_attribute_x("sh_coeffs", si, active)
+                sh_degree = int(dr.sqrt((sh_coeffs.shape[0] // 3) - 1))
+                sh_dir_coef = dr.sh_eval(ray.d, sh_degree)
+                emission = mi.Color3f(0.0)
+                for i, sh in enumerate(sh_dir_coef):
+                    emission += sh * mi.Color3f(
+                        [sh_coeffs[i * 3 + j] for j in range(3)]
+                    )
+                return dr.maximum(emission + 0.5, 0.0)
+            else:
+                return mi.Color3f(0.0)
+
+        return dr.dispatch(si.shape, eval, si, ray, active)
+
     def eval_transmission(self, si, ray, active):
         """
         Evaluate the transmission model on intersected volumetric primitives
