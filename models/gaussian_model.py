@@ -169,6 +169,7 @@ class GaussianModel:
         vertices['nz'] = normals[:, 2].astype(np.float32)
 
         opacity = self._opacity.numpy() if isinstance(self._opacity, torch.Tensor) else self._opacity
+        opacity = np.minimum(opacity, 1-(1e-6))
         opacity = np.log(opacity / (1 - opacity))
         vertices['opacity'] = opacity[:, 0].astype(np.float32)
 
@@ -183,6 +184,7 @@ class GaussianModel:
             vertices[f'f_rest_{i}'] = f_rest[:, i].astype(np.float32)
 
         scales = self._scaling.numpy() if isinstance(self._scaling, torch.Tensor) else self._scaling
+        scales = np.maximum(scales, 1e-6)
         scales = np.log(scales)
         for i in range(scales.shape[1]):
             vertices[f'scale_{i}'] = scales[:, i].astype(np.float32)
