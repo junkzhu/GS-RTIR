@@ -101,6 +101,6 @@ if __name__ == "__main__":
         loss_str = f'Loss: {loss_np[0]:.4f}'
         pbar.set_description(loss_str)
 
-        #save ply
-        gaussians.restore_from_params(params)
-        gaussians.save_ply(REFINE_PATH)
+    #save ply
+    gaussians.restore_from_params(params)
+    gaussians.save_ply(REFINE_PATH)
