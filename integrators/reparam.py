@@ -221,8 +221,12 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return dr.dispatch(si.shape, eval, si, ray, active)
 
     #-------------------- BSDF --------------------
-    def fresnel_schlick(self, F0, VdotH):
-        return F0 + (1.0 - F0) * dr.power(2.0, -5.55473 * VdotH - 6.98316) * VdotH
+    def fresnel_schlick(self, F0, cosTheta):
+        # F0: Color3f, cosTheta: scalar or array in [0,1]
+        # Schlick approximation: F = F0 + (1-F0)*(1-cosTheta)^5
+        c = dr.clamp(1.0 - cosTheta, 0.0, 1.0)
+        c5 = dr.power(c, 5.0)
+        return F0 + (1.0 - F0) * c5
 
     def ggx_D(self, N, H, roughness):
         α = roughness * roughness
@@ -235,15 +239,20 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         return D
 
-    def G1(self, N, V, k):
+    def smith_G1(self, N, V, alpha):
+        # G1 for GGX (Heitz) ; alpha is roughness^2
         NdotV = dr.clamp(dr.dot(N, V), 0.0, 1.0)
-        G1 = NdotV / (NdotV * ( 1 - k) + k)
+        # avoid division by 0
+        a = alpha
+        # common stable form:
+        tmp = dr.sqrt(a * a + (1.0 - a * a) * (NdotV * NdotV))
+        G1 = 2.0 * NdotV / (NdotV + tmp + EPS)
         return G1
 
     def ggx_G(self, N, V, L, roughness):
-        k = (roughness + 1) * (roughness + 1) / 8
-        G1V = self.G1(N, V, k)
-        G1L = self.G1(N, L, k)
+        alpha = roughness * roughness
+        G1V = self.smith_G1(N, V, alpha)
+        G1L = self.smith_G1(N, L, alpha)
         return G1V * G1L
 
     def eval_bsdf(self, albedo, roughness, metallic, N, V, L, H):
@@ -256,8 +265,10 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         NdotH = dr.clamp(dr.dot(N, H), 0.0, 1.0)
         VdotH = dr.clamp(dr.dot(V, H), 0.0, 1.0)
 
-        #follow Tensor IR
-        F0 = mi.Color3f(0.04)
+        # --- Fresnel base F0 mix (dielectric 0.04 vs albedo for metal) ---
+        F0_dielectric = mi.Color3f(0.04)
+        # ensure types broadcast correctly: metallic may be scalar or per-item
+        F0 = dr.lerp(F0_dielectric, albedo, metallic)  # Color3f
 
         # Fresnel term (Schlick)
         F = self.fresnel_schlick(F0, VdotH)  # Color3f
@@ -272,21 +283,24 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         denom = 4.0 * (NdotV * NdotL + 1e-8)  # scalar
         specular = spec_num / denom  # Color3f
 
-
-        diffuse = albedo / PI
+        F_avg = (F[0] + F[1] + F[2]) / 3.0
+        diffuse = (1.0 - metallic) * (albedo / PI) * (1.0 - F_avg)
 
         bsdf_val = specular + diffuse
         cosθ = dr.clamp(dr.dot(N, L), 1e-6, 1.0)
         bsdf_val = bsdf_val * cosθ
 
         # ---------- PDF ----------
+        diffuse_prob  = (1.0 - metallic) * 0.5
+        specular_prob = 1.0 - diffuse_prob
+        #Sepcular
         pdf_H = D * NdotH
         pdf_spec = pdf_H / (4.0 * dr.maximum(1e-4, VdotH))
-
+        #Diffuse
         cosθ = dr.dot(N, L)
         pdf_diff = dr.select(cosθ > 0, cosθ * dr.rcp(dr.pi), 0.0)
 
-        bsdf_pdf = 0.5 * pdf_spec + 0.5 * pdf_diff
+        bsdf_pdf = specular_prob * pdf_spec + diffuse_prob * pdf_diff
 
         return bsdf_val, bsdf_pdf
     
@@ -306,7 +320,9 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         r1 = sampler.next_1d()
         r2 = sampler.next_1d()
 
-        choose_specular = (r1 < 0.5)
+        diffuse_prob  = (1.0 - metallic) * 0.5
+        specular_prob = 1.0 - diffuse_prob
+        choose_specular = (r1 < specular_prob)
 
         # ---------- Specular ----------
         u1_spec = r1
@@ -348,4 +364,3 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         # To world
         L_world = si.to_world(L_local)
         return L_world, pdf
-
