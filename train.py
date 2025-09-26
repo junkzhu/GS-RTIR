@@ -75,6 +75,7 @@ if __name__ == "__main__":
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
             ref_albedo_img = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
+            ref_roughness_img = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]][:, :, :1]
             ref_normal_img = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
 
             #aovs
@@ -86,6 +87,7 @@ if __name__ == "__main__":
 
             view_loss = l1(img, ref_img) / dataset.batch_size
             albedo_loss = l1(albedo_img, ref_albedo_img) / dataset.batch_size
+            roughness_loss = l1(roughness_img, ref_roughness_img) / dataset.batch_size
 
             #loss follow GS-IR
             view_tv_loss = TV(dr.concat([albedo_img, roughness_img, metallic_img], axis=2), ref_img) / dataset.batch_size
@@ -96,7 +98,7 @@ if __name__ == "__main__":
             normal_loss = lnormal(normal_img, ref_normal_img) / dataset.batch_size
             normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
 
-            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss + albedo_loss
+            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss #+ albedo_loss + roughness_loss
 
             dr.backward(total_loss)
 
@@ -110,8 +112,6 @@ if __name__ == "__main__":
             #metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
             depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
 
-            fake_normal_mask = np.any(ref_normal_img != 0, axis=2, keepdims=True)
-            metallic_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(fake_normal_mask, ref_normal_img, 0))), dataset.target_res) 
             normal_mask = np.any(normal_img != 0, axis=2, keepdims=True)
             normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, normal_img, 0))), dataset.target_res) 
 
@@ -119,7 +119,7 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}_ref' + ('.png')), rgb_ref_bmp)
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_albedo' + ('.png')), albedo_bmp)
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_roughness' + ('.png')), roughness_bmp)
-            mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_metallic' + ('.png')), metallic_bmp)
+            #mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_metallic' + ('.png')), metallic_bmp)
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 

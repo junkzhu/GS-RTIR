@@ -169,7 +169,7 @@ class GaussianModel:
         vertices['nz'] = normals[:, 2].astype(np.float32)
 
         opacity = self._opacity.numpy() if isinstance(self._opacity, torch.Tensor) else self._opacity
-        opacity = np.minimum(opacity, 1-(1e-6))
+        opacity = np.clip(opacity, 1e-6, 1-1e-6)
         opacity = np.log(opacity / (1 - opacity))
         vertices['opacity'] = opacity[:, 0].astype(np.float32)
 

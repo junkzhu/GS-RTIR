@@ -249,6 +249,8 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         R = dr.clamp(R, 0.05, 1.0)
         M = dr.clamp(M, 0.0, 1.0)
 
+        R = mi.math.srgb_to_linear(R)
+
         return A, R, M, D, N, (T < 0.9) , weight_acc
 
     @dr.syntax
