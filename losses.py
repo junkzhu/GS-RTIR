@@ -13,7 +13,7 @@ def l2(reference, image):
     '''
     return dr.mean(dr.power(reference - image, 2), axis=None)
 
-def psnr(reference, image):
+def lpsnr(reference, image):
     '''
     PSNR loss function
     '''

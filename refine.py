@@ -54,6 +54,7 @@ if __name__ == "__main__":
     pbar = tqdm.tqdm(range(REFINE_NITER))
     for i in pbar:
         loss = mi.Float(0.0)
+        psnr = mi.Float(0.0)
         
         for idx, sensor in dataset.get_sensor_iterator(i):
             img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
@@ -92,13 +93,17 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 
+            psnr_val = lpsnr(ref_img, img) / dataset.batch_size
+            psnr += psnr_val
+
         opt.step()
         params.update(opt)
 
         dataset.update_sensors(i)
 
         loss_np = np.asarray(loss)
-        loss_str = f'Loss: {loss_np[0]:.4f}'
+        psnr_np = np.asarray(psnr)
+        loss_str = f'Loss: {loss_np[0]:.4f}, Psnr: {psnr_np[0]:.4f}'
         pbar.set_description(loss_str)
 
     #save ply

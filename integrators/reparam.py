@@ -10,9 +10,22 @@ class ReparamIntegrator(mi.SamplingIntegrator):
     def __init__(self, props=mi.Properties()):
         super().__init__(props)
         self.max_depth = props.get('max_depth', 4)
+        self.gaussian_max_depth = props.get('gaussian_max_depth', 128)
         self.hide_emitters = props.get('hide_emitters', False)
         self.use_mis = props.get('use_mis', False)
     
+    def SurfaceInteraction3f(self, ray, D, N, valid = True):
+        #create a new si as gaussian intersection
+        si = dr.zeros(mi.SurfaceInteraction3f)
+        si.sh_frame.n = N
+        si.initialize_sh_frame() 
+        si.n = si.sh_frame.n
+        si.wi = -ray.d
+        si.t = dr.select((D > 0) & valid, D, si.t)
+        si.p = ray.o + 0.995 * ray.d * D
+        si.wavelengths = ray.wavelengths
+        return si
+
     def prepare(self, sensor, seed, spp, aovs=[]):
         film = sensor.film()
         sampler = sensor.sampler().clone()
@@ -220,6 +233,133 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         return dr.dispatch(si.shape, eval, si, ray, active)
 
+    @dr.syntax
+    def ray_marching_loop(self, scene, sampler, primal, ray, δA, δR, δM, δD, δN, state_in, active):
+        
+        num = mi.UInt32(0)
+        active = mi.Mask(active)
+
+        ray = mi.Ray3f(dr.detach(ray)) #clone a new ray
+
+        A = mi.Spectrum(0.0 if primal else state_in['albedo'])
+        R = mi.Float(0.0 if primal else state_in['roughness'][0])
+        M = mi.Float(0.0 if primal else state_in['metallic'][0])
+        D = mi.Float(0.0 if primal else state_in['depth'][0])
+        N = mi.Spectrum(0.0 if primal else state_in['normal'])
+        weight_acc = mi.Float(0.0 if primal else state_in['weight_acc'][0])
+
+        δA = mi.Spectrum(δA if δA is not None else 0)
+        δR = mi.Spectrum(δR if δR is not None else 0)
+        δM = mi.Spectrum(δM if δM is not None else 0)
+        δD = mi.Spectrum(δD if δD is not None else 0)
+        δN = mi.Spectrum(δN if δN is not None else 0)
+
+        β = mi.Spectrum(1.0) #for rgb
+        T = mi.Float(1.0) #for aovs
+
+        depth_acc = mi.Float(0.0)
+        while dr.hint(active, label=f"BSDF ray tracing"):
+            si_cur = scene.ray_intersect(ray)
+            active &= si_cur.is_valid() & si_cur.shape.is_ellipsoids()
+
+            depth_acc += dr.select(active, si_cur.t, 0.0)
+
+            depth = mi.Float(0.0)
+            normal = mi.Spectrum(0.0)
+
+            albedo = mi.Spectrum(0.0)
+            roughness = mi.Float(0.0)
+            metallic = mi.Float(0.0)
+            
+            weight = mi.Float(0.0)
+            with dr.resume_grad(when=not primal):
+                normals_val, albedo_val, roughness_val, metallic_val = self.eval_bsdf_component(si_cur, ray, active)
+                transmission = self.eval_transmission(si_cur, ray, active)
+
+                weight = T * (1.0 - transmission)
+
+                albedo = β * (1.0 - transmission) * albedo_val
+                albedo[~dr.isfinite(albedo)] = 0.0
+
+                roughness = weight * roughness_val
+                roughness[~dr.isfinite(roughness)] = 0.0
+
+                metallic = weight * metallic_val
+                metallic[~dr.isfinite(metallic)] = 0.0
+
+                depth[active] = weight * depth_acc
+                depth[~dr.isfinite(depth)] = 0.0
+
+                normal[active] = weight * normals_val
+                normal[~dr.isfinite(normal)] = 0.0
+
+            A[active] = (A + albedo) if primal else (A - albedo)
+            R[active] = (R + roughness) if primal else (R - roughness)
+            M[active] = (M + metallic) if primal else (M - metallic)
+
+            D[active] = (D + depth) if primal else (D - depth)
+            N[active] = (N + normal) if primal else (N - normal)
+            weight_acc[active]= (weight_acc + weight) if primal else (weight_acc - weight)
+
+            β[active] *= transmission
+            T[active] *= transmission
+
+            ray.o[active] = si_cur.p + ray.d * 1e-4
+            depth_acc[active] += 1e-4
+
+            with dr.resume_grad(when=not primal):
+                if not primal:
+                    Ar_ind = A * transmission / dr.detach(transmission)
+                    Rr_ind = R * transmission / dr.detach(transmission)
+                    Mr_ind = M * transmission / dr.detach(transmission)
+                    Dr_ind = D * transmission / dr.detach(transmission)
+                    Nr_ind = N * transmission / dr.detach(transmission)
+                    
+                    Ao = albedo + Ar_ind
+                    Ro = roughness + Rr_ind
+                    Mo = metallic + Mr_ind
+                    Do = depth + Dr_ind
+                    No = normal + Nr_ind
+
+                    Ao = dr.select(active & dr.isfinite(Ao), Ao, 0.0)
+                    Ro = dr.select(active & dr.isfinite(Ro), Ro, 0.0)
+                    Mo = dr.select(active & dr.isfinite(Mo), Mo, 0.0)
+                    Do = dr.select(active & dr.isfinite(Do), Do, 0.0)
+                    No = dr.select(active & dr.isfinite(No), No, 0.0)
+
+                    loss = δA * Ao + δR * Ro + δM * Mo + δD * Do + δN * No
+                    dr.backward_from(loss)
+            
+            active &= si_cur.is_valid()
+            num[active] += 1
+
+            β_max = dr.max(β)
+
+            active &= β_max > 0.01
+            active &= num < self.gaussian_max_depth
+
+            # sample_rr = sampler.next_1d() # Ensures the same sequence of random number is drawn for the primal and adjoint passes.
+            # if primal and num >= 10:
+            #     rr_prob = dr.maximum(β_max, 0.1)
+            #     rr_active = β_max < 0.1
+            #     β[rr_active] *= dr.rcp(rr_prob)
+            #     rr_continue = sample_rr < rr_prob
+            #     active &= ~rr_active | rr_continue
+
+        D = D / dr.maximum(weight_acc, 1e-8)
+        N = dr.normalize(N)
+        
+        A = dr.clamp(A, 0.0, 1.0)
+        R = dr.clamp(R, 0.05, 1.0)
+        M = dr.clamp(M, 0.0, 1.0)
+
+        R = mi.math.srgb_to_linear(R)
+
+        rand = sampler.next_1d()
+        active = rand < (1-T)
+
+        return A, R, M, D, N, active , weight_acc
+
     #-------------------- BSDF --------------------
     def fresnel_schlick(self, F0, cosTheta):
         # F0: Color3f, cosTheta: scalar or array in [0,1]
@@ -364,3 +504,13 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         # To world
         L_world = si.to_world(L_local)
         return L_world, pdf
+    
+    def bsdf(self, sampler, si, albedo, roughness, metallic, N, Vdir):
+        Ldir, pdf0 = self.sample_bsdf(sampler, si, roughness, metallic, Vdir)
+
+        Halfvector = dr.normalize(Ldir + Vdir)
+        val, pdf1 = self.eval_bsdf(albedo, roughness, metallic, N, Vdir, Ldir, Halfvector)
+
+        #TODO:验证PDF是否一致
+
+        return val, Ldir, pdf0

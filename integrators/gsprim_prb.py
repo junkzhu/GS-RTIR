@@ -6,7 +6,7 @@ from mitsuba.ad.integrators.common import mis_weight
 
 from .reparam import ReparamIntegrator
 
-class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
+class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
     def __init__(self, props):
         super().__init__(props)
 
@@ -134,124 +134,76 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         primal = (mode == dr.ADMode.Primal)
         forward = (mode == dr.ADMode.Forward)
         
-        active = mi.Mask(active)
-        result = mi.Spectrum(0.0)
+        # --------------------- Configure loop state ----------------------
+        active = mi.Bool(active)
+        
+        depth = mi.UInt32(0)
+        L = mi.Spectrum(0)
+        β = mi.Spectrum(1)
+        
+        ray_prev = dr.zeros(mi.Ray3f)
+        ray_cur = mi.Ray3f(ray)
+        
+        si_prev = dr.zeros(mi.SurfaceInteraction3f)
+        #pi info
+        A, R, M, D, N, valid, weight_acc = self.ray_marching_loop(scene, sampler, (primal|forward), ray_cur, δA, δR, δM, δD, δN, state_in, active)
+        
+        with dr.resume_grad(when=not primal):
+            si_cur = self.SurfaceInteraction3f(ray_cur, D, N, valid)
 
-        A, R, M, D, N, active, weight_acc = self.ray_marching_loop(scene, sampler,(primal|forward), ray, δA, δR, δM, δD, δN, state_in, active)
+        #visualize the emitter
+        # si_cur = self.SurfaceInteraction3f(ray_cur, D, N)
+        # if not self.hide_emitters:
+        #     result += dr.select(~active, si_cur.emitter(scene, ~active).eval(si_cur, ~active), 0.0)
 
-        with dr.resume_grad(when= forward):
-            if forward:
-                dr.enable_grad(A)
-                dr.enable_grad(R)
-                dr.enable_grad(M)
-                dr.enable_grad(D)
-                dr.enable_grad(N)
-
-            si = self.SurfaceInteraction3f(ray, D, N)
-
-            #visualize the emitter
-            if not self.hide_emitters:
-                result += dr.select(~active, si.emitter(scene, ~active).eval(si, ~active), 0.0)
+        while dr.hint(active, max_iterations=self.max_depth, label="Path Replay Backpropagation (%s)" % mode.name):
+            active_next = mi.Bool(active)
             
-            # ---------------------- Emitter sampling ----------------------
-            active_e = active
-            with dr.suspend_grad():
-                ds, _ = scene.sample_emitter_direction(si, sampler.next_2d(active_e), False, active)
-                active_e &= (ds.pdf != 0.0)
-                shadow_ray = si.spawn_ray_to(ds.p)
+            if dr.hint(self.hide_emitters, mode='scalar'):
+                active_next &= ~((depth == 0) & ~si_cur.is_valid())
 
-                occluded = self.ray_test(scene, sampler, shadow_ray, active_e)
+            with dr.resume_grad(when=not primal):         
+                Le = β * si_cur.emitter(scene).eval(si_cur, active_next)
 
-                si_e = dr.zeros(mi.SurfaceInteraction3f)
-                si_e.sh_frame.n = ds.n
-                si_e.initialize_sh_frame()
-                si_e.n = si_e.sh_frame.n
-                si_e.wi = -shadow_ray.d
-                si_e.wavelengths = ray.wavelengths
-                emitter_val = dr.select(active_e, ds.emitter.eval(si_e, active_e), 0.0)
+            active_next &= (depth + 1 < self.max_depth) & si_cur.is_valid()
 
-                emitter_val = dr.select(ds.pdf > 0, emitter_val / ds.pdf, 0.0)
-                visibility = dr.select(~occluded, 1.0, 0.0)
+            #get bsdf attributes
+            Vdirection = dr.normalize(-ray_cur.d) #view direction (outgoing) 
+            bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A, R, M, N, Vdirection)
 
-            #-----------eval bsdf-----------
-            Ldirection = shadow_ray.d #light direction (incoming)
-            Vdirection = dr.normalize(-ray.d) #view direction (outgoing) 
-            Halfvector = dr.normalize(Ldirection + Vdirection) # half-vector
+            bsdf_weight = bsdf_val / dr.maximum(1e-8, bsdf_pdf)
 
-            bsdf_val = mi.Spectrum(0.0)
-            bsdf_pdf = dr.zeros(mi.Float)
+            L = L + Le
+            β *= mi.Spectrum(bsdf_weight)
 
-            if self.use_mis:
-                bsdf_val, bsdf_pdf = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
-                nee_contrib = visibility * bsdf_val * emitter_val * mis_weight(ds.pdf, dr.detach(bsdf_pdf))
-            else:
-                bsdf_val, _ = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
-                nee_contrib = visibility * bsdf_val * emitter_val
+            β_max = dr.max(mi.unpolarized_spectrum(β))
+            active_next &= (β_max != 0)
 
-            result[active] += nee_contrib
+            #find the next ineraction
+            ray_next = si_cur.spawn_ray(bsdf_dir)
+            A, R, M, D, N, valid, weight_acc = self.ray_marching_loop(scene, sampler,(primal|forward), ray_next, δA, δR, δM, δD, δN, state_in, active_next)
+            si_next = self.SurfaceInteraction3f(ray_next, D, N, valid)
 
-            # ---------------------- BSDF sampling ----------------------
-            if self.use_mis:
-                with dr.suspend_grad():
-                    bs_dir, bs_pdf = self.sample_bsdf(sampler, si, R, M, Vdirection)
-                    active_bsdf = active & (bs_pdf > 0.0)
+            #update loop variables
+            depth[si_cur.is_valid()] += 1
+            active = active_next
+            si_prev = si_cur
+            si_cur = si_next
+            ray_prev = ray_cur
+            ray_cur = ray_next
 
-                    ds = dr.zeros(mi.DirectionSample3f)
-                    ds.d = bs_dir
-                    ds.dist = dr.inf
-                    ds.emitter = scene.emitters()[0]
-
-                    emitter_pdf = scene.pdf_emitter_direction(si, ds, active_bsdf)
-                
-                Halfvector = dr.normalize(bs_dir + Vdirection)
-                bsdf_val, _ = self.eval_bsdf(A, R, M, N, Vdirection, bs_dir, Halfvector)
-                shadow_ray = si.spawn_ray(bs_dir)
-                occluded = self.ray_test(scene, sampler, shadow_ray, active_bsdf)
-                visibility = dr.select(~occluded, 1.0, 0.0)
-
-                si_e = dr.zeros(mi.SurfaceInteraction3f)
-                si_e.sh_frame.n = ds.n
-                si_e.initialize_sh_frame()
-                si_e.n = si_e.sh_frame.n
-                si_e.wi = -shadow_ray.d
-                si_e.wavelengths = ray.wavelengths
-                emitter_val = dr.select(active_bsdf, ds.emitter.eval(si_e, active_bsdf), 0.0)
-
-                bsdf_contrib = visibility * bsdf_val / bs_pdf * emitter_val * mis_weight(bs_pdf, emitter_pdf)
-                result[active_bsdf] += bsdf_contrib
-
-            gradients = {}
-            if forward:
-                dr.backward_from(result)                
-                δA = dr.grad(A) # ∂RGB/∂A
-                δR = dr.grad(R)
-                δM = dr.grad(M)
-                δD = dr.grad(D)
-                δN = dr.grad(N)
-                gradients = {
-                    'albedo': δA,
-                    'roughness': δR,
-                    'metallic': δM,
-                    'depth': δD,
-                    'normal': δN
-                }
-
-        #aov & state_out
+        gradients = {}
         aovs = {
             'albedo': dr.select(active, A, 0.0),
             'roughness': dr.select(active, mi.Spectrum(R), 0.0),
             'metallic': dr.select(active, mi.Spectrum(M), 0.0),
             'depth': dr.select(active, mi.Spectrum(D), 0.0),
-            'normal': dr.select(active, N, 0.0),
-            
-            'weight_acc': dr.select(active, weight_acc, 0.0),
-            'Vdirection': dr.select(active, Vdirection, 0.0),
-            'Ldirection': dr.select(active, Ldirection, 0.0)
+            'normal': dr.select(active, N, 0.0)
         }
 
-        return mi.Spectrum(result), True, aovs, gradients
+        return L, True, aovs, gradients
 
     def to_string(self):
-        return f"GaussianPrimitiveRadianceFieldIntegrator[]"
+        return f"GaussianPrimitivePrbIntegrator[]"
     
-mi.register_integrator("gsprim_rf", lambda props: GaussianPrimitiveRadianceFieldIntegrator(props))
+mi.register_integrator("gsprim_prb", lambda props: GaussianPrimitivePrbIntegrator(props))
