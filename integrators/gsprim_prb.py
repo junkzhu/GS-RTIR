@@ -134,64 +134,79 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         primal = (mode == dr.ADMode.Primal)
         forward = (mode == dr.ADMode.Forward)
         
+        valid_ray = (not self.hide_emitters) and scene.environment() is not None
+
         # --------------------- Configure loop state ----------------------
         active = mi.Bool(active)
         
         depth = mi.UInt32(0)
         L = mi.Spectrum(0)
         β = mi.Spectrum(1)
-        
+        mis_em = mi.Float(1)
+
         ray_prev = dr.zeros(mi.Ray3f)
         ray_cur = mi.Ray3f(ray)
         
         si_prev = dr.zeros(mi.SurfaceInteraction3f)
         #pi info
-        A, R, M, D, N, valid, weight_acc = self.ray_marching_loop(scene, sampler, (primal|forward), ray_cur, δA, δR, δM, δD, δN, state_in, active)
-        
-        with dr.resume_grad(when=not primal):
-            si_cur = self.SurfaceInteraction3f(ray_cur, D, N, valid)
+        A, R, M, D, N, si_valid, weight_acc = self.ray_marching_loop(scene, sampler, (primal|forward), ray_cur, δA, δR, δM, δD, δN, state_in, active)
+        valid_ray |= si_valid    
 
-        #visualize the emitter
-        # si_cur = self.SurfaceInteraction3f(ray_cur, D, N)
-        # if not self.hide_emitters:
-        #     result += dr.select(~active, si_cur.emitter(scene, ~active).eval(si_cur, ~active), 0.0)
+        with dr.resume_grad(when=not primal):
+            si_cur = self.SurfaceInteraction3f(ray_cur, D, N, si_valid)
 
         while dr.hint(active, max_iterations=self.max_depth, label="Path Replay Backpropagation (%s)" % mode.name):
             active_next = mi.Bool(active)
             
-            if dr.hint(self.hide_emitters, mode='scalar'):
-                active_next &= ~((depth == 0) & ~si_cur.is_valid())
-
             with dr.resume_grad(when=not primal):         
-                Le = β * si_cur.emitter(scene).eval(si_cur, active_next)
+                Le = β * mis_em * si_cur.emitter(scene).eval(si_cur, active_next)
 
             active_next &= (depth + 1 < self.max_depth) & si_cur.is_valid()
 
-            #get bsdf attributes
-            Vdirection = dr.normalize(-ray_cur.d) #view direction (outgoing) 
-            bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A, R, M, N, Vdirection)
+            # Next event estimation
+            active_em = active_next & si_valid
+            ds, em_weight = scene.sample_emitter_direction(si_cur, sampler.next_2d(), False, active_em)
+            active_em &= (ds.pdf != 0.0)
 
+            with dr.resume_grad(when= not primal):
+                em_ray = si_cur.spawn_ray_to(ds.p)
+                em_ray.d = dr.detach(em_ray.d)
+                occluded = self.ray_test(scene, sampler, em_ray, active_em)
+                active_em &= ~occluded
+                
+                #eval pdf of the ray in bsdf sampling
+                Ldirection = em_ray.d
+                Vdirection = dr.normalize(-ray_cur.d) #view direction (outgoing) 
+                Halfvector = dr.normalize(Ldirection + Vdirection)
+                bsdf_value_em, bsdf_pdf_em = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
+                mis_direct = mis_weight(ds.pdf, bsdf_pdf_em)
+                Lr_dir = β * dr.detach(mis_direct) * bsdf_value_em * em_weight
+
+            bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A, R, M, N, Vdirection) #get bsdf attributes
             bsdf_weight = bsdf_val / dr.maximum(1e-8, bsdf_pdf)
-
-            L = L + Le
             β *= mi.Spectrum(bsdf_weight)
+            L_prev = L
+            L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
 
-            β_max = dr.max(mi.unpolarized_spectrum(β))
-            active_next &= (β_max != 0)
-
-            #find the next ineraction
+            # Intersect next surface
             ray_next = si_cur.spawn_ray(bsdf_dir)
-            A, R, M, D, N, valid, weight_acc = self.ray_marching_loop(scene, sampler,(primal|forward), ray_next, δA, δR, δM, δD, δN, state_in, active_next)
-            si_next = self.SurfaceInteraction3f(ray_next, D, N, valid)
+            A, R, M, D, N, si_next_valid, weight_acc = self.ray_marching_loop(scene, sampler,(primal|forward), ray_next, δA, δR, δM, δD, δN, state_in, active_next)
+            si_next = self.SurfaceInteraction3f(ray_next, D, N, si_next_valid)
 
-            #update loop variables
+            # Compute MIS weight for the next vertex
+            ds = mi.DirectionSample3f(scene, si=si_next, ref=si_cur)
+            pdf_em = scene.pdf_emitter_direction(ref=si_cur, ds=ds, active=si_next_valid)
+            mis_em = mis_weight(bsdf_pdf, pdf_em)
+
+            if not primal:
+                si_prev = si_cur
+                ray_prev = ray_cur
+            si_cur = si_next
+            ray_cur = ray_next
             depth[si_cur.is_valid()] += 1
             active = active_next
-            si_prev = si_cur
-            si_cur = si_next
-            ray_prev = ray_cur
-            ray_cur = ray_next
 
+        result = L
         gradients = {}
         aovs = {
             'albedo': dr.select(active, A, 0.0),
@@ -201,7 +216,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             'normal': dr.select(active, N, 0.0)
         }
 
-        return L, True, aovs, gradients
+        return dr.select(valid_ray, mi.Spectrum(result), dr.detach(0.0)), True, aovs, gradients
 
     def to_string(self):
         return f"GaussianPrimitivePrbIntegrator[]"
