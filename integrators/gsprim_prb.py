@@ -184,13 +184,14 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             active_next &= (depth + 1 < self.max_depth) & si_cur.is_valid() #if 最后一轮 不进行后续的计算
             # Next event estimation
             active_em = active_next
-            ds, em_weight = scene.sample_emitter_direction(si_cur, sampler.next_2d(), False, active_em) #随机采样一个新的方向（envmap采样）
+            ds, em_weight = scene.sample_emitter_direction(si_cur, sampler.next_2d(active_em), False, active_em) #随机采样一个新的方向（envmap采样）
             active_em &= (ds.pdf != 0.0)
 
             with dr.resume_grad(when= not primal):
                 em_ray = si_cur.spawn_ray_to(ds.p) #生成一条新的光线
                 em_ray.d = dr.detach(em_ray.d)
                 occluded = self.ray_test(scene, sampler, em_ray, active_em) #测试是否遮挡
+                visibility = dr.select(~occluded, 1.0, 0.0)
                 active_em &= ~occluded
                 
                 if not primal:
@@ -204,12 +205,13 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 Halfvector = dr.normalize(Ldirection + Vdirection)
                 bsdf_value_em, bsdf_pdf_em = self.eval_bsdf(A_cur, R_cur, M_cur, N_cur, Vdirection, Ldirection, Halfvector) #计算交点的BSDF值（envmap采样）
                 mis_direct = mis_weight(ds.pdf, bsdf_pdf_em)
-                Lr_dir = β * mis_direct * bsdf_value_em * em_weight #直接光源（envmap）
-                
+                Lr_dir = visibility * β * mis_direct * bsdf_value_em * em_weight #直接光源（envmap）
+
                 bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A_cur, R_cur, M_cur, N_cur, Vdirection) #get bsdf attributes
                 bsdf_weight = bsdf_val / dr.maximum(1e-8, bsdf_pdf)
                 β *= mi.Spectrum(bsdf_weight)
                 L_prev = L 
+
                 L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
                 #L = L + dr.select(first_vertex, Le + Lr_dir, 0.0)
                 

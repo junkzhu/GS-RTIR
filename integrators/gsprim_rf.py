@@ -184,7 +184,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 bsdf_val, _ = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
                 nee_contrib = visibility * bsdf_val * emitter_val
 
-            result[active] += dr.select(occluded, 0.0, 1.0)
+            result[active] += nee_contrib
 
             # ---------------------- BSDF sampling ----------------------
             if self.use_mis:
@@ -214,7 +214,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 emitter_val = dr.select(active_bsdf, ds.emitter.eval(si_e, active_bsdf), 0.0)
 
                 bsdf_contrib = visibility * bsdf_val / bs_pdf * emitter_val * mis_weight(bs_pdf, emitter_pdf)
-                #result[active_bsdf] += bsdf_contrib
+                result[active_bsdf] += bsdf_contrib
 
             gradients = {}
             if forward:
