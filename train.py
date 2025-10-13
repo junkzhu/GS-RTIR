@@ -99,9 +99,9 @@ if __name__ == "__main__":
             normal_loss = lnormal(normal_img, ref_normal_img) / dataset.batch_size
             normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
 
-            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss #+ albedo_loss + roughness_loss
+            total_loss = 0.00001 *view_loss + 0.00001 *view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss + albedo_loss + roughness_loss
 
-            dr.backward(total_loss)
+            #dr.backward(total_loss)
 
             loss += total_loss
 
@@ -132,3 +132,9 @@ if __name__ == "__main__":
         loss_np = np.asarray(loss)
         loss_str = f'Loss: {loss_np[0]:.4f}'
         pbar.set_description(loss_str)
+
+        if (i+1) % 100 == 0:
+            gaussians.restore_from_params(params)
+            save_path = f"{OUTPUT_PLY_DIR}/iter_{i:03d}.ply"
+            gaussians.save_ply(save_path)
+            print(f"[Iter {i}] Saved PLY to {save_path}")

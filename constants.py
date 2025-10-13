@@ -3,17 +3,17 @@ it specifies output paths and scene directory."""
 
 import os
 #--------------dataset--------------
-DATASET_PATH = 'D:/dataset/hotdog'
+DATASET_PATH = 'D:/ZJK/hotdog_aov'
 
-PLY_PATH = 'D:/dataset/point_cloud.ply'
+PLY_PATH = 'D:/ZJK/GS-RTIR/outputs/ply/iter_099.ply'
 ENVMAP_PATH = 'D:/dataset/sunset.hdr'
 
 REFINE_PATH = 'D:/dataset/point_cloud_refine.ply'
 
 #--------------integrator--------------
 #INTEGRATOR = 'volprim_rf_basic'
-INTEGRATOR = 'gsprim_rf'
-SPP = 8
+INTEGRATOR = 'gsprim_prb'
+SPP = 32
 PRIMAL_SPP_MULT = 4
 
 
@@ -41,5 +41,8 @@ os.makedirs(OUTPUT_OPT_DIR, exist_ok=True)
 
 OUTPUT_EXTRA_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './extra'))
 os.makedirs(OUTPUT_EXTRA_DIR, exist_ok=True)
+
+OUTPUT_PLY_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './ply'))
+os.makedirs(OUTPUT_PLY_DIR, exist_ok=True)
 
 del __SCRIPT_DIR

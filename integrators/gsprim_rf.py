@@ -141,11 +141,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
         with dr.resume_grad(when= forward):
             if forward:
-                dr.enable_grad(A)
-                dr.enable_grad(R)
-                dr.enable_grad(M)
-                dr.enable_grad(D)
-                dr.enable_grad(N)
+                dr.enable_grad(A, R, M, D, N)
 
             si = self.SurfaceInteraction3f(ray, D, N)
 
@@ -172,7 +168,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
                 emitter_val = dr.select(ds.pdf > 0, emitter_val / ds.pdf, 0.0)
                 visibility = dr.select(~occluded, 1.0, 0.0)
-
+            
             #-----------eval bsdf-----------
             Ldirection = shadow_ray.d #light direction (incoming)
             Vdirection = dr.normalize(-ray.d) #view direction (outgoing) 
@@ -188,7 +184,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 bsdf_val, _ = self.eval_bsdf(A, R, M, N, Vdirection, Ldirection, Halfvector)
                 nee_contrib = visibility * bsdf_val * emitter_val
 
-            result[active] += nee_contrib
+            result[active] += dr.select(occluded, 0.0, 1.0)
 
             # ---------------------- BSDF sampling ----------------------
             if self.use_mis:
@@ -218,7 +214,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 emitter_val = dr.select(active_bsdf, ds.emitter.eval(si_e, active_bsdf), 0.0)
 
                 bsdf_contrib = visibility * bsdf_val / bs_pdf * emitter_val * mis_weight(bs_pdf, emitter_pdf)
-                result[active_bsdf] += bsdf_contrib
+                #result[active_bsdf] += bsdf_contrib
 
             gradients = {}
             if forward:

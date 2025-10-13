@@ -22,7 +22,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         si.n = si.sh_frame.n
         si.wi = -ray.d
         si.t = dr.select((D > 0) & valid, D, si.t)
-        si.p = ray.o + 0.995 * ray.d * D
+        si.p = ray.o + 0.998 * ray.d * D
         si.wavelengths = ray.wavelengths
         return si
 
@@ -227,6 +227,11 @@ class ReparamIntegrator(mi.SamplingIntegrator):
                 metallics = shape.eval_attribute_1("metallics", si, active)
                 metallics = dr.clamp(metallics, 0.0, 1.0)
 
+                # high_rough_mask = roughnesses > 0.8
+                # red_color = mi.Color3f(1.0, 0.0, 0.0)
+                # default_color = mi.Color3f(0.0, 0.0, 0.0)
+                # albedos = dr.select(high_rough_mask, red_color, default_color)
+
                 return normals, albedos, roughnesses, metallics
             else:
                 return mi.Vector3f(0.0), mi.Color3f(0.0), mi.Float(0.0), mi.Float(0.0)
@@ -246,7 +251,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         M = mi.Float(0.0 if primal else state_in['metallic'][0])
         D = mi.Float(0.0 if primal else state_in['depth'][0])
         N = mi.Spectrum(0.0 if primal else state_in['normal'])
-        weight_acc = mi.Float(0.0 if primal else state_in['weight_acc'][0])
+        weight_acc = mi.Float(0.0 if primal else state_in['weight_acc'])
 
         δA = mi.Spectrum(δA if δA is not None else 0)
         δR = mi.Spectrum(δR if δR is not None else 0)
@@ -254,8 +259,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         δD = mi.Spectrum(δD if δD is not None else 0)
         δN = mi.Spectrum(δN if δN is not None else 0)
 
-        β = mi.Spectrum(1.0) #for rgb
-        T = mi.Float(1.0) #for aovs
+        T = mi.Float(1.0)
 
         depth_acc = mi.Float(0.0)
         while dr.hint(active, label=f"BSDF ray tracing"):
@@ -278,7 +282,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
                 weight = T * (1.0 - transmission)
 
-                albedo = β * (1.0 - transmission) * albedo_val
+                albedo = weight * albedo_val
                 albedo[~dr.isfinite(albedo)] = 0.0
 
                 roughness = weight * roughness_val
@@ -301,7 +305,6 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             N[active] = (N + normal) if primal else (N - normal)
             weight_acc[active]= (weight_acc + weight) if primal else (weight_acc - weight)
 
-            β[active] *= transmission
             T[active] *= transmission
 
             ray.o[active] = si_cur.p + ray.d * 1e-4
@@ -333,9 +336,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             active &= si_cur.is_valid()
             num[active] += 1
 
-            β_max = dr.max(β)
-
-            active &= β_max > 0.01
+            active &= T > 0.01
             active &= num < self.gaussian_max_depth
 
             # sample_rr = sampler.next_1d() # Ensures the same sequence of random number is drawn for the primal and adjoint passes.
@@ -353,7 +354,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         R = dr.clamp(R, 0.05, 1.0)
         M = dr.clamp(M, 0.0, 1.0)
 
-        R = mi.math.srgb_to_linear(R)
+        #R = mi.math.srgb_to_linear(R) #TODO: 属性中存储的roughness如果是srgb空间的，优化中更容易收敛
 
         rand = sampler.next_1d()
         active = rand < (1-T)
