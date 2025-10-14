@@ -99,9 +99,9 @@ if __name__ == "__main__":
             normal_loss = lnormal(normal_img, ref_normal_img) / dataset.batch_size
             normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
 
-            total_loss = 0.00001 *view_loss + 0.00001 *view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss + albedo_loss + roughness_loss
+            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss #+ normal_loss + normal_tv_loss + albedo_loss + roughness_loss
 
-            #dr.backward(total_loss)
+            dr.backward(total_loss)
 
             loss += total_loss
 

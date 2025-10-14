@@ -5,7 +5,7 @@ import os
 #--------------dataset--------------
 DATASET_PATH = 'D:/ZJK/hotdog_aov'
 
-PLY_PATH = 'D:/ZJK/GS-RTIR/outputs/ply/iter_099.ply'
+PLY_PATH = 'D:/dataset/point_cloud.ply'
 ENVMAP_PATH = 'D:/dataset/sunset.hdr'
 
 REFINE_PATH = 'D:/dataset/point_cloud_refine.ply'
@@ -20,7 +20,7 @@ PRIMAL_SPP_MULT = 4
 #--------------training--------------
 BATCH_SIZE = 6
 NITER = 512
-OPTIMIZE_PARAMS = ['shape.opacities', 'shape.normals','shape.albedos','shape.roughnesses']
+OPTIMIZE_PARAMS = ['shape.normals','shape.albedos','shape.roughnesses']
 RENDER_UPSAMPLE_ITER = [64, 128, 256]
 
 REFINE_NITER = 428

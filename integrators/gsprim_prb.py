@@ -132,7 +132,6 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
     def sample(self, mode, scene, sampler, ray, δL, δA, δR, δM, δD, δN, state_in, active, **kwargs):
         
         primal = (mode == dr.ADMode.Primal)
-        forward = (mode == dr.ADMode.Forward)
         
         valid_ray = (not self.hide_emitters) and scene.environment() is not None
 
@@ -140,7 +139,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         active = mi.Bool(active)
         
         depth = mi.UInt32(0)
-        L = mi.Spectrum(0)
+
+        L = mi.Spectrum(0 if primal else state_in['result'])
+        δL = mi.Spectrum(δL if δL is not None else 0)
+
         β = mi.Spectrum(1)
         mis_em = mi.Float(1)
 
@@ -159,19 +161,22 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         with dr.resume_grad(when=not primal):
             A_cur, R_cur, M_cur, D_cur, N_cur, si_valid, weight_acc = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
             si_cur = self.SurfaceInteraction3f(ray_cur, D_cur, N_cur, si_valid)
-            valid_ray |= si_cur.is_valid()
+            active &= si_cur.is_valid()
+        
+        valid_ray = active # output mask
         
         aovs = {
-            'albedo': dr.select(si_valid, A_cur, 0.0),
-            'roughness': dr.select(si_valid, mi.Spectrum(R_cur), 0.0),
-            'metallic': dr.select(si_valid, mi.Spectrum(M_cur), 0.0),
-            'depth': dr.select(si_valid, mi.Spectrum(D_cur), 0.0),
-            'normal': dr.select(si_valid, N_cur, 0.0)
+            'albedo': dr.select(active, A_cur, 0.0),
+            'roughness': dr.select(active, mi.Spectrum(R_cur), 0.0),
+            'metallic': dr.select(active, mi.Spectrum(M_cur), 0.0),
+            'depth': dr.select(active, mi.Spectrum(D_cur), 0.0),
+            'normal': dr.select(active, N_cur, 0.0)
         }
 
         while dr.hint(active, max_iterations=self.max_depth, label="Path Replay Backpropagation (%s)" % mode.name):
             first_vertex = (depth == 0)
             active_next = mi.Bool(active)
+            active_prev = mi.Bool(active)
             
             if not primal:
                 with dr.resume_grad():
@@ -179,18 +184,18 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     dr.disable_grad(si_prev)
             
             with dr.resume_grad(when=not primal):      
-                Le = β * mis_em * si_cur.emitter(scene).eval(si_cur) #当没有与物体相交（无效si），那么就直接查找环境贴图的值（光源只有环境贴图）
+                Le = β * mis_em * si_cur.emitter(scene).eval(si_cur)
            
-            active_next &= (depth + 1 < self.max_depth) & si_cur.is_valid() #if 最后一轮 不进行后续的计算
+            active_next &= (depth + 1 < self.max_depth) & si_cur.is_valid()
             # Next event estimation
             active_em = active_next
-            ds, em_weight = scene.sample_emitter_direction(si_cur, sampler.next_2d(active_em), False, active_em) #随机采样一个新的方向（envmap采样）
+            ds, em_weight = scene.sample_emitter_direction(si_cur, sampler.next_2d(active_em), False, active_em)
             active_em &= (ds.pdf != 0.0)
 
             with dr.resume_grad(when= not primal):
-                em_ray = si_cur.spawn_ray_to(ds.p) #生成一条新的光线
+                em_ray = si_cur.spawn_ray_to(ds.p)
                 em_ray.d = dr.detach(em_ray.d)
-                occluded = self.ray_test(scene, sampler, em_ray, active_em) #测试是否遮挡
+                occluded = self.ray_test(scene, sampler, em_ray, active_em)
                 visibility = dr.select(~occluded, 1.0, 0.0)
                 active_em &= ~occluded
                 
@@ -203,55 +208,64 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 Ldirection = em_ray.d
                 Vdirection = dr.normalize(-ray_cur.d) #view direction (outgoing) 
                 Halfvector = dr.normalize(Ldirection + Vdirection)
-                bsdf_value_em, bsdf_pdf_em = self.eval_bsdf(A_cur, R_cur, M_cur, N_cur, Vdirection, Ldirection, Halfvector) #计算交点的BSDF值（envmap采样）
-                mis_direct = mis_weight(ds.pdf, bsdf_pdf_em)
-                Lr_dir = visibility * β * mis_direct * bsdf_value_em * em_weight #直接光源（envmap）
-
-                bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A_cur, R_cur, M_cur, N_cur, Vdirection) #get bsdf attributes
-                bsdf_weight = bsdf_val / dr.maximum(1e-8, bsdf_pdf)
-                active_next &= (bsdf_pdf > 0.0)
-                β *= mi.Spectrum(bsdf_weight)
-                L_prev = L 
-
-                L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
+                bsdf_value_em, bsdf_pdf_em = self.eval_bsdf(A_cur, R_cur, M_cur, N_cur, Vdirection, Ldirection, Halfvector)
+                mis_direct = dr.detach(mis_weight(ds.pdf, bsdf_pdf_em))
+                Lr_dir = visibility * β * mis_direct * bsdf_value_em * em_weight
                 
-                # render direct illumination
-                # L += dr.select((depth == 1), Le, 0.0)
-                # L += dr.select(first_vertex, Lr_dir, 0.0)
+            bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A_cur, R_cur, M_cur, N_cur, Vdirection) #get bsdf attributes
+            bsdf_weight = bsdf_val / dr.maximum(1e-8, bsdf_pdf)
+            active_next &= (bsdf_pdf > 0.0)
+            β *= mi.Spectrum(bsdf_weight)
+            L_prev = L 
 
-                # # render indirect illumination
-                # L += dr.select((depth == 1), 0.0, Le)
-                # L += dr.select(first_vertex, 0.0, Lr_dir)
+            L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
+                
+            # render direct illumination
+            # L += dr.select((depth == 1), Le, 0.0)
+            # L += dr.select(first_vertex, Lr_dir, 0.0)
+
+            # # render indirect illumination
+            # L += dr.select((depth == 1), 0.0, Le)
+            # L += dr.select(first_vertex, 0.0, Lr_dir)
                  
             # Intersect next surface
-            ray_next = si_cur.spawn_ray(bsdf_dir) #根据bsdf采样获得一个新的方向
+            ray_next = si_cur.spawn_ray(bsdf_dir)
             A_next, R_next, M_next, D_next, N_next, si_next_valid, weight_acc_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
-            si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, si_next_valid) #创建bsdf采样的交点
+            si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, si_next_valid)
 
             # Compute MIS weight for the next vertex
             ds = mi.DirectionSample3f(scene, si=si_next, ref=si_cur)
             em_pdf = scene.pdf_emitter_direction(ref=si_cur, ds=ds, active=active_next)
-            mis_em = mis_weight(bsdf_pdf, em_pdf)
+            mis_em = dr.detach(mis_weight(bsdf_pdf, em_pdf))
 
             if not primal:
                 sampler_clone = sampler.clone()
                 active_next_next = active_next & si_next.is_valid() & (depth + 2 < self.max_depth)
 
-                bsdf_next_val, bsdf_next_dir, bsdf_next_pdf = self.bsdf(sampler, si_next, A_next, R_next, M_next, N_next, ray_next.d)
-                bsdf_prev_val, bsdf_prev_dir, bsdf_prev_pdf = self.bsdf(sampler, si_prev, A_prev, R_prev, M_prev, N_prev, ray_prev.d)
-
+                # next
                 active_em_next = active_next_next
-                ds_next, em_weight_next = scene.sample_emitter_direction(si_next, sampler_clone.next_2d(), True, active_em_next)
-                active_em_next &= (ds_next.pdf != 0.0)
+                ds_next, em_weight_next = scene.sample_emitter_direction(si_next, sampler_clone.next_2d(active_em_next), False, active_em_next)
+                
+                em_ray_next = si_next.spawn_ray_to(ds_next.p)
+                Ldirection_next = em_ray_next.d
+                Vdirection_next = dr.normalize(-ray_next.d)
+                Halfvector_next = dr.normalize(Ldirection_next + Vdirection_next)
+                bsdf_next_val, bsdf_next_pdf = self.eval_bsdf(A_next, R_next, M_next, N_next, Vdirection_next, Ldirection_next, Halfvector_next)
 
-                mis_direct_next = dr.select(ds_next.delta, 1, mis_weight(ds_next.pdf, bsdf_next_pdf))
+                mis_direct_next = mis_weight(ds_next.pdf, bsdf_next_pdf)
                 Lr_dir_next = β * mis_direct_next * bsdf_next_val * em_weight_next
 
+                # prev
+                active_em_prev =  active_prev
+                ds_prev, em_weight_prev = scene.sample_emitter_direction(si_prev, sampler_clone.next_2d(active_em_prev), False, active_em_prev)
+                
+                em_ray_prev = si_prev.spawn_ray_to(ds_prev.p)
+                Ldirection_prev = em_ray_prev.d
+                Vdirection_prev = dr.normalize(-ray_prev.d)
+                Halfvector_prev = dr.normalize(Ldirection_prev + Vdirection_prev)
+                bsdf_prev_val, bsdf_prev_pdf = self.eval_bsdf(A_prev, R_prev, M_prev, N_prev, Vdirection_prev, Ldirection_prev, Halfvector_prev)
+                
                 with dr.resume_grad(si_cur.p):
-                    wo_prev = dr.normalize(si_cur.p - si_prev.p)
-                    wi_next = dr.normalize(si_cur.p - si_next.p)
-
-                    si_next.wi = si_next.to_local(wi_next)
                     Le_next = β * mis_em * si_next.emitter(scene).eval(si_next, active_next)
                     L_next = L - dr.detach(Le_next) - dr.detach(Lr_dir_next)
 
@@ -260,7 +274,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     extra[si_next.is_valid()] += L_next * bsdf_next_val / dr.detach(bsdf_next_val)
 
                 with dr.resume_grad():
-                    bsdf_val_det = bsdf_weight * bsdf_pdf
+                    bsdf_val_det = dr.detach(bsdf_weight * bsdf_pdf)
                     inv_bsdf_val_det = dr.select((bsdf_val_det != 0), dr.rcp(bsdf_val_det), 0)
                     Lr_ind = L * dr.replace_grad(1, inv_bsdf_val_det * bsdf_val)
 
@@ -272,34 +286,37 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     δA_cur, δR_cur, δM_cur, δD_cur, δN_cur = map(dr.grad, (A_cur, R_cur, M_cur, D_cur, N_cur))
 
                     result_temp = {
-                        'albedo': dr.select(valid_ray, A_cur, 0.0),
-                        'roughness': dr.select(valid_ray, mi.Spectrum(R_cur), 0.0),
-                        'metallic': dr.select(valid_ray, mi.Spectrum(M_cur), 0.0),
-                        'depth': dr.select(valid_ray, mi.Spectrum(D_cur), 0.0),
-                        'normal': dr.select(valid_ray, N_cur, 0.0),
-                        'weight_acc': dr.select(valid_ray, weight_acc, 0.0)
+                        'albedo': dr.select(active_next, A_cur, 0.0),
+                        'roughness': dr.select(active_next, mi.Spectrum(R_cur), 0.0),
+                        'metallic': dr.select(active_next, mi.Spectrum(M_cur), 0.0),
+                        'depth': dr.select(active_next, mi.Spectrum(D_cur), 0.0),
+                        'normal': dr.select(active_next, N_cur, 0.0),
+                        'weight_acc': dr.select(active_next, weight_acc, 0.0)
                     }
 
-                if first_vertex:
-                    δA = δA
-                    δR = δR
-                    δM = δM
-                    δD = δD
-                    δN = δN
-                    self.ray_marching_loop(scene, sampler, False, ray_cur, δA, δR, δM, δD, δN, result_temp, active)
+                # δA = δA + δA_cur
+                # δR = δR + δR_cur
+                # δM = δM + δM_cur
+                # δD = δD + δD_cur
+                # δN = δN + δN_cur
+                
+                self.ray_marching_loop(scene, sampler_clone, False, ray_cur, δA_cur, δR_cur, δM_cur, δD_cur, δN_cur, result_temp, active_prev)
 
             depth[si_cur.is_valid()] += 1
             
+            active_prev = active
             active = active_next
             si_prev, ray_prev = si_cur, ray_cur
             si_cur, ray_cur = si_next, ray_next
             A_prev, R_prev, M_prev, D_prev, N_prev = map(dr.detach, (A_cur, R_cur, M_cur, D_cur, N_cur))
             A_cur, R_cur, M_cur, D_cur, N_cur = map(dr.detach,(A_next, R_next, M_next, D_next, N_next))
 
-        result = L
+        result = dr.select(valid_ray, mi.Spectrum(L), 0.0)
+        aovs['result'] = result
+
         gradients = {}
         
-        return dr.select(valid_ray, mi.Spectrum(result), 0.0), True, aovs, gradients
+        return result, True, aovs, gradients
 
     def to_string(self):
         return f"GaussianPrimitivePrbIntegrator[]"
