@@ -514,7 +514,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         #TODO:验证PDF是否一致
 
-        bsdf_pdf = pdf0
+        bsdf_pdf = pdf1
         bsdf_dir = Ldir
         bsdf_val = dr.select(bsdf_pdf > 0, val, 0.0)
         
