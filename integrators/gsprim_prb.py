@@ -214,7 +214,14 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 L_prev = L 
 
                 L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
-                #L = L + dr.select(first_vertex, Le + Lr_dir, 0.0)
+                
+                # render direct illumination
+                # L += dr.select((depth == 1), Le, 0.0)
+                # L += dr.select(first_vertex, Lr_dir, 0.0)
+
+                # # render indirect illumination
+                # L += dr.select((depth == 1), 0.0, Le)
+                # L += dr.select(first_vertex, 0.0, Lr_dir)
                  
             # Intersect next surface
             ray_next = si_cur.spawn_ray(bsdf_dir) #根据bsdf采样获得一个新的方向
