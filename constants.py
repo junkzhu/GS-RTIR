@@ -13,7 +13,7 @@ REFINE_PATH = 'D:/dataset/point_cloud_refine.ply'
 #--------------integrator--------------
 #INTEGRATOR = 'volprim_rf_basic'
 INTEGRATOR = 'gsprim_prb'
-SPP = 32
+SPP = 8
 PRIMAL_SPP_MULT = 4
 
 

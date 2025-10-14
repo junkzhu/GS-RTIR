@@ -209,12 +209,13 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
                 bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A_cur, R_cur, M_cur, N_cur, Vdirection) #get bsdf attributes
                 bsdf_weight = bsdf_val / dr.maximum(1e-8, bsdf_pdf)
+                active_next &= (bsdf_pdf > 0.0)
                 β *= mi.Spectrum(bsdf_weight)
                 L_prev = L 
 
                 L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
                 #L = L + dr.select(first_vertex, Le + Lr_dir, 0.0)
-                
+                 
             # Intersect next surface
             ray_next = si_cur.spawn_ray(bsdf_dir) #根据bsdf采样获得一个新的方向
             A_next, R_next, M_next, D_next, N_next, si_next_valid, weight_acc_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
@@ -222,7 +223,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
             # Compute MIS weight for the next vertex
             ds = mi.DirectionSample3f(scene, si=si_next, ref=si_cur)
-            em_pdf = scene.pdf_emitter_direction(ref=si_cur, ds=ds, active=si_next_valid)
+            em_pdf = scene.pdf_emitter_direction(ref=si_cur, ds=ds, active=active_next)
             mis_em = mis_weight(bsdf_pdf, em_pdf)
 
             if not primal:
@@ -280,13 +281,13 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     δN = δN
                     self.ray_marching_loop(scene, sampler, False, ray_cur, δA, δR, δM, δD, δN, result_temp, active)
 
+            depth[si_cur.is_valid()] += 1
+            
+            active = active_next
             si_prev, ray_prev = si_cur, ray_cur
             si_cur, ray_cur = si_next, ray_next
             A_prev, R_prev, M_prev, D_prev, N_prev = map(dr.detach, (A_cur, R_cur, M_cur, D_cur, N_cur))
             A_cur, R_cur, M_cur, D_cur, N_cur = map(dr.detach,(A_next, R_next, M_next, D_next, N_next))
-
-            depth[si_cur.is_valid()] += 1
-            active = active_next
 
         result = L
         gradients = {}

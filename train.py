@@ -35,7 +35,7 @@ if __name__ == "__main__":
         },
         'integrator': {
             'type': INTEGRATOR,
-            'max_depth': 2,
+            'max_depth': 4,
             'gaussian_max_depth': 128,
             'hide_emitters': True,
             'use_mis': True
