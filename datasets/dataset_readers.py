@@ -178,6 +178,28 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
             d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
         ref_roughness_images.append(d)
 
-    return sensors, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images
+    albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset.png') for path in image_paths]
+    albedo_priors_images=[]
+    for idx, fn in enumerate(albedo_priors_paths):
+        bmp = load_bitmap(fn, False)
+        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
+        new_res = bmp.size()
+        while np.min(new_res) > 4:
+            new_res = new_res // 2
+            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+            albedo_priors_images.append(d)
+
+    roughness_priors_paths = [path.replace('rgba_sunset.png', 'roughness_sunset.png') for path in image_paths]
+    roughness_priors_images=[]
+    for idx, fn in enumerate(roughness_priors_paths):
+        bmp = load_bitmap(fn, False)
+        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
+        new_res = bmp.size()
+        while np.min(new_res) > 4:
+            new_res = new_res // 2
+            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+            roughness_priors_images.append(d)
+
+    return sensors, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images
 
 sceneLoadTypeCallbacks = {"Blender": read_nerf_synthetic}

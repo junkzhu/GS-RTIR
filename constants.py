@@ -3,7 +3,7 @@ it specifies output paths and scene directory."""
 
 import os
 #--------------dataset--------------
-DATASET_PATH = 'D:/ZJK/hotdog_aov'
+DATASET_PATH = 'D:/ZJK/hotdog_aov_diffusion'
 
 PLY_PATH = 'D:/dataset/point_cloud.ply'
 ENVMAP_PATH = 'D:/dataset/sunset.hdr'

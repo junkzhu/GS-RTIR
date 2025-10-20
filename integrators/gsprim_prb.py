@@ -294,13 +294,13 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                         'weight_acc': dr.select(active_next, weight_acc, 0.0)
                     }
 
-                # δA = δA + δA_cur
-                # δR = δR + δR_cur
-                # δM = δM + δM_cur
-                # δD = δD + δD_cur
-                # δN = δN + δN_cur
-                
-                self.ray_marching_loop(scene, sampler_clone, False, ray_cur, δA_cur, δR_cur, δM_cur, δD_cur, δN_cur, result_temp, active_prev)
+                δA = dr.select(first_vertex, δA + δA_cur, δA_cur)
+                δR = dr.select(first_vertex, δR + δR_cur, δR_cur)
+                δM = dr.select(first_vertex, δM + δM_cur, δM_cur)
+                δD = dr.select(first_vertex, δD + δD_cur, δD_cur)
+                δN = dr.select(first_vertex, δN + δN_cur, δN_cur)
+
+                self.ray_marching_loop(scene, sampler_clone, False, ray_cur, δA, δR, δM, δD, δN, result_temp, active_prev)
 
             depth[si_cur.is_valid()] += 1
             

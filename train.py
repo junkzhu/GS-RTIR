@@ -75,7 +75,7 @@ if __name__ == "__main__":
             seed += 1 + len(dataset.sensors)
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
-            ref_albedo_img = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
+            ref_albedo_img = dataset.albedo_priors_images[idx][sensor.film().crop_size()[0]]
             ref_roughness_img = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]][:, :, :1]
             ref_normal_img = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
 
@@ -87,8 +87,8 @@ if __name__ == "__main__":
             normal_img = aovs['normal'][:, :, :3]
 
             view_loss = l1(img, ref_img) / dataset.batch_size
-            albedo_loss = l1(albedo_img, ref_albedo_img) / dataset.batch_size
-            roughness_loss = l1(roughness_img, ref_roughness_img) / dataset.batch_size
+            albedo_loss = l2(albedo_img, ref_albedo_img) / dataset.batch_size
+            roughness_loss = l2(roughness_img, ref_roughness_img) / dataset.batch_size
 
             #loss follow GS-IR
             view_tv_loss = TV(dr.concat([albedo_img, roughness_img, metallic_img], axis=2), ref_img) / dataset.batch_size
@@ -96,10 +96,10 @@ if __name__ == "__main__":
 
             #convert depth to fake_normal
             fake_normal_img = convert_depth_to_normal(depth_img, sensor)
-            normal_loss = lnormal(normal_img, ref_normal_img) / dataset.batch_size
-            normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
+            normal_loss = lnormal(normal_img, fake_normal_img) / dataset.batch_size
+            normal_tv_loss = TV(fake_normal_img, normal_img) / dataset.batch_size
 
-            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss #+ normal_loss + normal_tv_loss + albedo_loss + roughness_loss
+            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + 0.1 * albedo_loss + 0.1 * roughness_loss + normal_loss + normal_tv_loss
 
             dr.backward(total_loss)
 
