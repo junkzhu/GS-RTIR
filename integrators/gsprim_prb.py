@@ -198,7 +198,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 occluded = self.ray_test(scene, sampler, em_ray, active_em)
                 visibility = dr.select(~occluded, 1.0, 0.0)
                 active_em &= ~occluded
-                L[active_next] += visibility
+                
                 if not primal:
                     ds.d = em_ray.d
                     em_val = scene.eval_emitter_direction(dr.detach(si_cur), ds, active_em)
@@ -218,7 +218,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             β *= mi.Spectrum(bsdf_weight)
             L_prev = L 
 
-            #L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
+            L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
                 
             # render direct illumination
             # L += dr.select((depth == 1), Le, 0.0)
