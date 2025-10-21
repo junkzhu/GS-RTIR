@@ -143,7 +143,10 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             si_cur = scene.ray_intersect(ray)
             active &= si_cur.is_valid() & si_cur.shape.is_ellipsoids()
 
-            NdotV = dr.dot(si_cur.sh_frame.n, -ray.d)
+            N, _, _, _ =self.eval_bsdf_component(si_cur, ray, active)
+            NdotV = dr.dot(N, -ray.d)
+
+            # NdotV = dr.dot(si_cur.sh_frame.n, -ray.d)
             self_occ = NdotV < 0 #self-occlusion
 
             transmission = self.eval_transmission(si_cur, ray, active)

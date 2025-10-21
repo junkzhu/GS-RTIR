@@ -75,8 +75,8 @@ if __name__ == "__main__":
             seed += 1 + len(dataset.sensors)
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
-            ref_albedo_img = dataset.albedo_priors_images[idx][sensor.film().crop_size()[0]]
-            ref_roughness_img = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]][:, :, :1]
+            albedo_priors_img = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
+            roughness_priors_img = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]][:, :, :1]
             ref_normal_img = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
 
             #aovs
@@ -87,8 +87,8 @@ if __name__ == "__main__":
             normal_img = aovs['normal'][:, :, :3]
 
             view_loss = l1(img, ref_img) / dataset.batch_size
-            albedo_loss = l2(albedo_img, ref_albedo_img) / dataset.batch_size
-            roughness_loss = l2(roughness_img, ref_roughness_img) / dataset.batch_size
+            albedo_loss = l2(albedo_img, albedo_priors_img) / dataset.batch_size
+            roughness_loss = l2(roughness_img, roughness_priors_img) / dataset.batch_size
 
             #loss follow GS-IR
             view_tv_loss = TV(dr.concat([albedo_img, roughness_img, metallic_img], axis=2), ref_img) / dataset.batch_size

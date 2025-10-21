@@ -114,7 +114,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
 
     def srgb_to_linear(img):
         """Convert sRGB to linear RGB (gamma correction)"""
-        return np.where(img <= 0.04045, img / 12.92, ((img + 0.055) / 1.055) ** 2.4)
+        return img ** 2.2
     
     def load_bitmap(fn, bsrgb2linear = True):
         """Load bitmap as float32 and apply gamma correction"""
@@ -181,7 +181,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
     albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset.png') for path in image_paths]
     albedo_priors_images=[]
     for idx, fn in enumerate(albedo_priors_paths):
-        bmp = load_bitmap(fn, False)
+        bmp = load_bitmap(fn, True)
         d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
         new_res = bmp.size()
         while np.min(new_res) > 4:

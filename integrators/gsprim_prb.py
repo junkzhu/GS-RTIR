@@ -173,10 +173,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             'normal': dr.select(active, N_cur, 0.0)
         }
 
+        active_prev = mi.Bool(active)
         while dr.hint(active, max_iterations=self.max_depth, label="Path Replay Backpropagation (%s)" % mode.name):
             first_vertex = (depth == 0)
             active_next = mi.Bool(active)
-            active_prev = mi.Bool(active)
             
             if not primal:
                 with dr.resume_grad():
@@ -198,7 +198,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 occluded = self.ray_test(scene, sampler, em_ray, active_em)
                 visibility = dr.select(~occluded, 1.0, 0.0)
                 active_em &= ~occluded
-                
+                L[active_next] += visibility
                 if not primal:
                     ds.d = em_ray.d
                     em_val = scene.eval_emitter_direction(dr.detach(si_cur), ds, active_em)
@@ -218,7 +218,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             β *= mi.Spectrum(bsdf_weight)
             L_prev = L 
 
-            L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
+            #L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
                 
             # render direct illumination
             # L += dr.select((depth == 1), Le, 0.0)
@@ -286,12 +286,12 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     δA_cur, δR_cur, δM_cur, δD_cur, δN_cur = map(dr.grad, (A_cur, R_cur, M_cur, D_cur, N_cur))
 
                     result_temp = {
-                        'albedo': dr.select(active_next, A_cur, 0.0),
-                        'roughness': dr.select(active_next, mi.Spectrum(R_cur), 0.0),
-                        'metallic': dr.select(active_next, mi.Spectrum(M_cur), 0.0),
-                        'depth': dr.select(active_next, mi.Spectrum(D_cur), 0.0),
-                        'normal': dr.select(active_next, N_cur, 0.0),
-                        'weight_acc': dr.select(active_next, weight_acc, 0.0)
+                        'albedo': dr.select(active_prev, A_cur, 0.0),
+                        'roughness': dr.select(active_prev, mi.Spectrum(R_cur), 0.0),
+                        'metallic': dr.select(active_prev, mi.Spectrum(M_cur), 0.0),
+                        'depth': dr.select(active_prev, mi.Spectrum(D_cur), 0.0),
+                        'normal': dr.select(active_prev, N_cur, 0.0),
+                        'weight_acc': dr.select(active_prev, weight_acc, 0.0)
                     }
 
                 δA = dr.select(first_vertex, δA + δA_cur, δA_cur)

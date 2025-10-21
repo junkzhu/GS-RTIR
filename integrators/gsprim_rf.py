@@ -143,7 +143,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             if forward:
                 dr.enable_grad(A, R, M, D, N)
 
-            si = self.SurfaceInteraction3f(ray, D, N)
+            si = self.SurfaceInteraction3f(ray, D, N, active)
 
             #visualize the emitter
             if not self.hide_emitters:
