@@ -66,17 +66,24 @@ if __name__ == "__main__":
     pbar = tqdm.tqdm(range(NITER))
     for i in pbar:
         loss = mi.Float(0.0)
+        rgb_psnr = mi.Float(0.0)
+        albedo_psnr = mi.Float(0.0)
+        roughness_mse = mi.Float(0.0)
+        normal_mae = mi.Float(0.0)
         
         for idx, sensor in dataset.get_sensor_iterator(i):
             img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
                                   spp=SPP * PRIMAL_SPP_MULT, spp_grad=SPP,
-                                  seed=seed, seed_grad=seed+1+len(dataset.sensors))
+                                  seed=seed, seed_grad=seed + 1 + len(dataset.sensors))
             
             seed += 1 + len(dataset.sensors)
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
+            ref_albedo = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
+            ref_roughness = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]]
+            ref_normal = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
             
-            albedo_priors_img = dataset.normal_priors_images[idx][sensor.film().crop_size()[0]]
+            albedo_priors_img = dataset.albedo_priors_images[idx][sensor.film().crop_size()[0]]
             roughness_priors_img = dataset.roughness_priors_images[idx][sensor.film().crop_size()[0]]
             normal_priors_img = dataset.normal_priors_images[idx][sensor.film().crop_size()[0]]
 
@@ -101,8 +108,8 @@ if __name__ == "__main__":
             normal_loss = lnormal(normal_img, fake_normal_img) / dataset.batch_size
             normal_tv_loss = TV(fake_normal_img, normal_img) / dataset.batch_size
 
-            priors_loss = 0.1 * albedo_priors_loss + 0.1 * roughness_priors_loss + normal_priors_loss
-            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss + priors_loss
+            priors_loss = 0.1 * albedo_priors_loss + 0.1 * roughness_priors_loss + 0.1 * normal_priors_loss
+            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + 0.1 * normal_loss + 0.1 * normal_tv_loss + priors_loss
 
             dr.backward(total_loss)
 
@@ -111,8 +118,8 @@ if __name__ == "__main__":
             #----------------------------------save the results----------------------------------
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
             rgb_ref_bmp = resize_img(mi.Bitmap(ref_img),dataset.target_res)
-            albedo_bmp = resize_img(mi.Bitmap(albedo_priors_img), dataset.target_res)
-            roughness_bmp = resize_img(mi.Bitmap(roughness_priors_img), dataset.target_res)
+            albedo_bmp = resize_img(mi.Bitmap(albedo_img), dataset.target_res)
+            roughness_bmp = resize_img(mi.Bitmap(roughness_img), dataset.target_res)
             #metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
             depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
 
@@ -127,6 +134,11 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 
+            rgb_psnr += lpsnr(ref_img, img) / dataset.batch_size
+            albedo_psnr += lpsnr(ref_albedo, albedo_img) / dataset.batch_size
+            roughness_mse += l2(ref_roughness, roughness_img) / dataset.batch_size
+            normal_mae += lmae(ref_normal, normal_img) / dataset.batch_size
+
         opt.step()
         params.update(opt)
 
@@ -135,6 +147,8 @@ if __name__ == "__main__":
         loss_np = np.asarray(loss)
         loss_str = f'Loss: {loss_np[0]:.4f}'
         pbar.set_description(loss_str)
+
+        pbar.set_postfix({'rgb': rgb_psnr, 'albedo': albedo_psnr, 'roughness': roughness_mse, 'normal': normal_mae})
 
         if (i+1) % 100 == 0:
             gaussians.restore_from_params(params)

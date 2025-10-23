@@ -1,5 +1,6 @@
 import drjit as dr
 import mitsuba as mi
+import numpy as np
 
 def l1(reference, image):
     '''
@@ -33,3 +34,26 @@ def lnormal(reference, image):
     cos_sim = dr.sum(img_flat * ref_flat, axis=-1)
     loss = 1.0 - cos_sim
     return dr.mean(loss)
+
+def lmae(reference, image):
+    '''
+    Mean Angular Error
+    '''    
+    eps = 1e-8
+
+    reference = np.array(reference)
+    image = np.array(image)
+
+    mask = (np.linalg.norm(reference, axis=-1) > eps) & (np.linalg.norm(image, axis=-1) > eps)
+
+    ref_norm = reference / np.clip(np.linalg.norm(reference, axis=-1, keepdims=True), eps, None)
+    img_norm = image / np.clip(np.linalg.norm(image, axis=-1, keepdims=True), eps, None)
+
+    cos_theta = np.sum(ref_norm * img_norm, axis=-1)
+
+    cos_theta = np.clip(cos_theta, -1.0, 1.0)
+    angle = np.degrees(np.arccos(cos_theta))
+
+    mae = np.mean(angle[mask])
+
+    return mae

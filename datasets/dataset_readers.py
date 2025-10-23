@@ -116,7 +116,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         """Convert sRGB to linear RGB (gamma correction)"""
         return img ** 2.2
     
-    def load_bitmap(fn, bsrgb2linear = True, normalize = False):
+    def load_bitmap(fn, bsrgb2linear = True, normalize = False, mitsuba = False):
         """Load bitmap as float32 and apply gamma correction"""
         img = np.array(Image.open(fn)).astype(np.float32) / 255.0  # Normalize to [0, 1]
         
@@ -129,8 +129,10 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
             rgb = img[..., :3]
 
             rgb = rgb * 2 -1
-            rgb[..., 0] = -rgb[..., 0]
-            rgb[..., 2] = -rgb[..., 2]
+
+            if mitsuba:
+                rgb[..., 0] = -rgb[..., 0]
+                rgb[..., 2] = -rgb[..., 2]
             
             norm = np.linalg.norm(rgb, axis=-1, keepdims=True)
             img = rgb / np.maximum(norm, 1e-8) * alpha
@@ -139,6 +141,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
             alpha = img[..., 3:]
             rgb = img[..., :3]
             img = rgb * alpha  # Premultiply alpha (if needed)
+            
         return mi.Bitmap(img)
 
     ref_images=[]
@@ -165,9 +168,8 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
     normal_paths = [path.replace('rgba_sunset.png', 'normal.png') for path in image_paths]
     ref_normal_images=[]
     for idx, fn in enumerate(normal_paths):
-        bmp = load_bitmap(fn, False)
+        bmp = load_bitmap(fn, False, normalize=True, mitsuba=False)
         bmp = mi.TensorXf(bmp)
-        bmp = bmp * 2.0 - 1.0
         bmp = mi.Bitmap(bmp)
 
         d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
@@ -214,7 +216,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
     normal_priors_paths = [path.replace('rgba_sunset.png', 'normal_sunset.png') for path in image_paths]
     normal_priors_images=[]
     for idx, fn in enumerate(normal_priors_paths):
-        bmp = load_bitmap(fn, False, normalize=True)
+        bmp = load_bitmap(fn, False, normalize=True, mitsuba=True)
         bmp = np.array(bmp, dtype=np.float32)
 
         sensor = sensors[idx]
