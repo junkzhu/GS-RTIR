@@ -3,12 +3,12 @@ it specifies output paths and scene directory."""
 
 import os
 #--------------dataset--------------
-DATASET_PATH = 'D:/ZJK/hotdog_aov_diffusion'
+DATASET_PATH = 'D:/ZJK/hotdog_aov'
 
 PLY_PATH = 'D:/dataset/point_cloud.ply'
-ENVMAP_PATH = 'D:/dataset/sunset.hdr'
+ENVMAP_PATH = 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr'
 
-REFINE_PATH = 'D:/dataset/point_cloud_refine.ply'
+REFINE_PATH = 'D:/dataset/point_cloud_refined.ply'
 
 #--------------integrator--------------
 #INTEGRATOR = 'volprim_rf_basic'
@@ -23,9 +23,9 @@ NITER = 512
 OPTIMIZE_PARAMS = ['shape.normals','shape.albedos','shape.roughnesses']
 RENDER_UPSAMPLE_ITER = [64, 128, 256]
 
-REFINE_NITER = 428
-REFINE_PARAMS = ['shape.opacities', 'shape.normals', 'shape.sh_coeffs', 'shape.data']
-
+REFINE_NITER = 128
+REFINE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.sh_coeffs']
+REFINE_UPSAMPLE_ITER = [32, 64]
 
 #--------------folder--------------
 __SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__))

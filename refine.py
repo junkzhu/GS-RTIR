@@ -8,6 +8,8 @@ mi.set_variant('cuda_ad_rgb')
 
 from constants import *
 
+import optimizers
+
 from utils import *
 from models import *
 from integrators import *
@@ -15,7 +17,7 @@ from datasets import *
 from losses import *
 
 if __name__ == "__main__":
-    dataset = Dataset(DATASET_PATH)
+    dataset = Dataset(DATASET_PATH, REFINE_UPSAMPLE_ITER)
 
     gaussians = GaussianModel()
     gaussians.restore_from_ply(PLY_PATH)
@@ -45,9 +47,26 @@ if __name__ == "__main__":
     params.keep(REFINE_PARAMS) 
     for _, param in params.items():
         dr.enable_grad(param)
-    opt = mi.ad.Adam(lr=0.0001, params=params)
-    opt.set_learning_rate({'shape.sh_coeffs':0.002})
-    opt.set_learning_rate({'shape.normals':0.002})
+    
+    #clear opacity
+    n_ellipsoids = params['shape.opacities'].shape[0]
+    params['shape.opacities'] = dr.full(mi.Float, 0.01, n_ellipsoids)
+
+    #clear sh & normal
+    m_sh_coeffs = params['shape.sh_coeffs'].shape[0] // n_ellipsoids
+    m_normals = params['shape.normals'].shape[0] // n_ellipsoids
+    params['shape.sh_coeffs'] = dr.full(mi.Float, 0.0, n_ellipsoids * m_sh_coeffs)
+    params['shape.normals'] = dr.full(mi.Float, 0.1, n_ellipsoids * m_normals)
+    
+    opt = optimizers.BoundedAdam(lr=0.0001, params=params)
+    opt.set_learning_rate({'shape.opacities':0.02})
+    opt.set_learning_rate({'shape.sh_coeffs':0.02})
+    opt.set_learning_rate({'shape.normals':0.02})
+
+    opt.set_bounds('shape.scales',    lower=1e-6)
+    opt.set_bounds('shape.opacities', lower=1e-6, upper=1-1e-6)
+    opt.set_bounds('shape.sh_coeffs', lower=-1, upper=1)
+    opt.set_bounds('shape.normals', lower=-1, upper=1)
 
     seed = 0
 
@@ -58,25 +77,33 @@ if __name__ == "__main__":
         
         for idx, sensor in dataset.get_sensor_iterator(i):
             img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
-                                  spp=SPP * PRIMAL_SPP_MULT, spp_grad=SPP,
+                                  spp=1, spp_grad=1,
                                   seed=seed, seed_grad=seed+1+len(dataset.sensors))
             
             seed += 1 + len(dataset.sensors)
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
             
+            normal_priors_img = dataset.normal_priors_images[idx][sensor.film().crop_size()[0]]
+
             #aovs
             depth_img = aovs['depth'][:, :, :1]
             normal_img = aovs['normal'][:, :, :3]
             
-            view_loss = l1(img, ref_img) / dataset.batch_size
+            view_loss = l1(ref_img, img) / dataset.batch_size
 
-            #convert depth to fake_normal
+            # normal priors
+            normal_priors_loss = l2(normal_priors_img, normal_img) / dataset.batch_size
+
+            # convert depth to fake_normal
             fake_normal_img = convert_depth_to_normal(depth_img, sensor)
             normal_loss = lnormal(normal_img, fake_normal_img) / dataset.batch_size
             normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
 
-            total_loss = view_loss + normal_loss + normal_tv_loss
+            # encourage opacity to be 0 or 1
+            opacity_loss = opacity_entropy_loss(params['shape.opacities'])
+
+            total_loss = view_loss + normal_priors_loss + 0.1 * normal_loss + 0.1 * normal_tv_loss + 0.1 * opacity_loss
 
             dr.backward(total_loss)
             

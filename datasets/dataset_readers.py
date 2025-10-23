@@ -116,7 +116,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         """Convert sRGB to linear RGB (gamma correction)"""
         return img ** 2.2
     
-    def load_bitmap(fn, bsrgb2linear = True):
+    def load_bitmap(fn, bsrgb2linear = True, normalize = False):
         """Load bitmap as float32 and apply gamma correction"""
         img = np.array(Image.open(fn)).astype(np.float32) / 255.0  # Normalize to [0, 1]
         
@@ -124,6 +124,17 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         if bsrgb2linear:
             img = srgb_to_linear(img)
         
+        if normalize:
+            alpha = img[..., 3:]
+            rgb = img[..., :3]
+
+            rgb = rgb * 2 -1
+            rgb[..., 0] = -rgb[..., 0]
+            rgb[..., 2] = -rgb[..., 2]
+            
+            norm = np.linalg.norm(rgb, axis=-1, keepdims=True)
+            img = rgb / np.maximum(norm, 1e-8) * alpha
+
         if img.shape[-1] == 4:  # Handle alpha channel
             alpha = img[..., 3:]
             rgb = img[..., :3]
@@ -187,7 +198,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         while np.min(new_res) > 4:
             new_res = new_res // 2
             d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
-            albedo_priors_images.append(d)
+        albedo_priors_images.append(d)
 
     roughness_priors_paths = [path.replace('rgba_sunset.png', 'roughness_sunset.png') for path in image_paths]
     roughness_priors_images=[]
@@ -198,8 +209,32 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         while np.min(new_res) > 4:
             new_res = new_res // 2
             d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
-            roughness_priors_images.append(d)
+        roughness_priors_images.append(d)
 
-    return sensors, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images
+    normal_priors_paths = [path.replace('rgba_sunset.png', 'normal_sunset.png') for path in image_paths]
+    normal_priors_images=[]
+    for idx, fn in enumerate(normal_priors_paths):
+        bmp = load_bitmap(fn, False, normalize=True)
+        bmp = np.array(bmp, dtype=np.float32)
+
+        sensor = sensors[idx]
+        R_c2w = np.array(sensor.world_transform().matrix)[:3, :3].astype(np.float32).squeeze()
+        
+        H, W, _ = bmp.shape
+        bmp = bmp.reshape(-1, 3).T
+        bmp = R_c2w @ bmp
+        bmp = bmp.T.reshape(H, W, 3)
+        bmp /= np.maximum(np.linalg.norm(bmp, axis=-1, keepdims=True), 1e-8)
+
+        bmp = mi.Bitmap(bmp)
+
+        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
+        new_res = bmp.size()
+        while np.min(new_res) > 4:
+            new_res = new_res // 2
+            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+        normal_priors_images.append(d)
+
+    return sensors, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images
 
 sceneLoadTypeCallbacks = {"Blender": read_nerf_synthetic}

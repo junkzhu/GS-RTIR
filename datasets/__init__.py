@@ -10,11 +10,12 @@ class Dataset:
 
     def __init__(
         self,
-        source_path
+        source_path,
+        render_upsampler_iters=RENDER_UPSAMPLE_ITER,
     ) -> None:
         
         self.batch_size = BATCH_SIZE
-        self.render_upsample_iter = None
+        self.render_upsample_iter = list(render_upsampler_iters)
 
         self.sensors = {}
         self.ref_images = {}
@@ -23,17 +24,17 @@ class Dataset:
         self.ref_roughness_images = {}
         self.albedo_priors_images = {}
         self.roughness_priors_images = {}
+        self.normal_priors_images = {}
 
         self.target_res = [800,800]
 
         if os.path.exists(os.path.join(source_path, "sparse")):
             assert(1==2) #TODO COLMAP
         elif os.path.exists(os.path.join(source_path, "transforms_train.json")):
-            self.sensors, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images = sceneLoadTypeCallbacks["Blender"](
+            self.sensors, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["Blender"](
                 source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1]
             )
 
-            self.render_upsample_iter = list(RENDER_UPSAMPLE_ITER)
             self.init_res = mi.ScalarPoint2i(np.array(self.target_res)//2**len(self.render_upsample_iter))
 
             for sensor in self.sensors:

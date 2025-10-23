@@ -14,7 +14,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         self.hide_emitters = props.get('hide_emitters', False)
         self.use_mis = props.get('use_mis', False)
     
-    def SurfaceInteraction3f(self, ray, D, N, valid = True):
+    def SurfaceInteraction3f(self, ray, D, N, valid = True, offset = 5e-2):
         #create a new si as gaussian intersection
         si = dr.zeros(mi.SurfaceInteraction3f)
         si.sh_frame.n = N
@@ -22,7 +22,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         si.n = si.sh_frame.n
         si.wi = -ray.d
         si.t = dr.select((D > 0) & valid, D, si.t)
-        si.p = ray.o + 0.998 * ray.d * D
+        si.p = ray.o + (1 - offset) * ray.d * D
         si.wavelengths = ray.wavelengths
         return si
 

@@ -86,3 +86,11 @@ def convert_depth_to_normal(depth_map, sensor, fov_deg=39.0, pad=2, depth_thresh
     normal = dr.select(mask, normal, dr.zeros_like(normal))
 
     return normal
+
+def opacity_entropy_loss(opacities: mi.Float):
+    """
+    Entropy-style regularizer encouraging α→0 or 1
+    L = -mean(α*log(α+eps) + (1-α)*log(1-α+eps))
+    """
+    eps = 1e-6
+    return -dr.mean(opacities * dr.log(opacities + eps) + (1 - opacities) * dr.log(1 - opacities + eps))

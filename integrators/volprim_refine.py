@@ -206,12 +206,12 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             active &= num < self.max_depth
 
         D = D / dr.maximum(weight_acc, 1e-8)
-        N = dr.normalize(N)
+        N = dr.normalize(N + 1e-8)
         
         A = dr.clamp(A, 0.0, 1.0)
         A = mi.math.srgb_to_linear(A)
 
-        return A, D, N, (T < 0.9) , weight_acc
+        return A, D, N, (T<0.99), weight_acc
 
     @dr.syntax
     def sample(self, mode, scene, sampler, ray, δL, δA, δD, δN, state_in, active, **kwargs):

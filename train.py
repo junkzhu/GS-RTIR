@@ -75,9 +75,10 @@ if __name__ == "__main__":
             seed += 1 + len(dataset.sensors)
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
-            albedo_priors_img = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
-            roughness_priors_img = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]][:, :, :1]
-            ref_normal_img = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
+            
+            albedo_priors_img = dataset.normal_priors_images[idx][sensor.film().crop_size()[0]]
+            roughness_priors_img = dataset.roughness_priors_images[idx][sensor.film().crop_size()[0]]
+            normal_priors_img = dataset.normal_priors_images[idx][sensor.film().crop_size()[0]]
 
             #aovs
             albedo_img = aovs['albedo'][:, :, :3]
@@ -87,8 +88,9 @@ if __name__ == "__main__":
             normal_img = aovs['normal'][:, :, :3]
 
             view_loss = l1(img, ref_img) / dataset.batch_size
-            albedo_loss = l2(albedo_img, albedo_priors_img) / dataset.batch_size
-            roughness_loss = l2(roughness_img, roughness_priors_img) / dataset.batch_size
+            albedo_priors_loss = l2(albedo_img, albedo_priors_img) / dataset.batch_size
+            roughness_priors_loss = l2(roughness_img, roughness_priors_img) / dataset.batch_size
+            normal_priors_loss = l2(normal_img, normal_priors_img) / dataset.batch_size
 
             #loss follow GS-IR
             view_tv_loss = TV(dr.concat([albedo_img, roughness_img, metallic_img], axis=2), ref_img) / dataset.batch_size
@@ -99,7 +101,8 @@ if __name__ == "__main__":
             normal_loss = lnormal(normal_img, fake_normal_img) / dataset.batch_size
             normal_tv_loss = TV(fake_normal_img, normal_img) / dataset.batch_size
 
-            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + 0.1 * albedo_loss + 0.1 * roughness_loss + normal_loss + normal_tv_loss
+            priors_loss = 0.1 * albedo_priors_loss + 0.1 * roughness_priors_loss + normal_priors_loss
+            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + normal_loss + normal_tv_loss + priors_loss
 
             dr.backward(total_loss)
 
@@ -108,8 +111,8 @@ if __name__ == "__main__":
             #----------------------------------save the results----------------------------------
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
             rgb_ref_bmp = resize_img(mi.Bitmap(ref_img),dataset.target_res)
-            albedo_bmp = resize_img(mi.Bitmap(albedo_img), dataset.target_res)
-            roughness_bmp = resize_img(mi.Bitmap(roughness_img), dataset.target_res)
+            albedo_bmp = resize_img(mi.Bitmap(albedo_priors_img), dataset.target_res)
+            roughness_bmp = resize_img(mi.Bitmap(roughness_priors_img), dataset.target_res)
             #metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
             depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
 
