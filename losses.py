@@ -18,7 +18,14 @@ def lpsnr(reference, image):
     '''
     PSNR loss function
     '''
-    return 20 * dr.log(1.0 * dr.rsqrt(l2(reference, image))) * dr.rcp(dr.log(10))
+    reference = np.asarray(reference, dtype=np.float32)
+    image = np.asarray(image, dtype=np.float32)
+
+    reference = reference**(1/2.2)
+    image = image**(1/2.2)
+
+    mse = np.mean((reference - image)**2)
+    return -10.0 * np.log(mse) / np.log(10.0)
 
 def TV(reference, image):
     rgb_grad_h = dr.exp(-dr.mean(dr.abs(reference[1:, :, :] - reference[:-1, :, :]), axis=2))

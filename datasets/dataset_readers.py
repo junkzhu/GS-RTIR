@@ -1,6 +1,7 @@
 import json
 import os
 import numpy as np
+import drjit as dr
 import mitsuba as mi
 from pathlib import Path
 from PIL import Image
@@ -151,7 +152,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         new_res = bmp.size()
         while np.min(new_res) > 4:
             new_res = new_res // 2
-            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         ref_images.append(d)
 
     albedo_paths = [path.replace('rgba_sunset.png', 'albedo.png') for path in image_paths]
@@ -162,7 +163,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         new_res = bmp.size()
         while np.min(new_res) > 4:
             new_res = new_res // 2
-            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         ref_albedo_images.append(d)
 
     normal_paths = [path.replace('rgba_sunset.png', 'normal.png') for path in image_paths]
@@ -176,7 +177,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         new_res = bmp.size()
         while np.min(new_res) > 4:
             new_res = new_res // 2
-            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         ref_normal_images.append(d)
 
     roughness_paths = [path.replace('rgba_sunset.png', 'roughness.png') for path in image_paths]
@@ -188,7 +189,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         new_res = bmp.size()
         while np.min(new_res) > 4:
             new_res = new_res // 2
-            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         ref_roughness_images.append(d)
 
     albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset.png') for path in image_paths]
@@ -199,7 +200,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         new_res = bmp.size()
         while np.min(new_res) > 4:
             new_res = new_res // 2
-            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         albedo_priors_images.append(d)
 
     roughness_priors_paths = [path.replace('rgba_sunset.png', 'roughness_sunset.png') for path in image_paths]
@@ -210,7 +211,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         new_res = bmp.size()
         while np.min(new_res) > 4:
             new_res = new_res // 2
-            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         roughness_priors_images.append(d)
 
     normal_priors_paths = [path.replace('rgba_sunset.png', 'normal_sunset.png') for path in image_paths]
@@ -234,7 +235,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         new_res = bmp.size()
         while np.min(new_res) > 4:
             new_res = new_res // 2
-            d[int(new_res[0])] = mi.TensorXf(resize_img(bmp, new_res, smooth=False))
+            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         normal_priors_images.append(d)
 
     return sensors, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images

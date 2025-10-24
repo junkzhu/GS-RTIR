@@ -73,7 +73,8 @@ if __name__ == "__main__":
     pbar = tqdm.tqdm(range(REFINE_NITER))
     for i in pbar:
         loss = mi.Float(0.0)
-        psnr = mi.Float(0.0)
+        rgb_psnr = mi.Float(0.0)
+        normal_mae = mi.Float(0.0)
         
         for idx, sensor in dataset.get_sensor_iterator(i):
             img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
@@ -83,6 +84,7 @@ if __name__ == "__main__":
             seed += 1 + len(dataset.sensors)
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
+            ref_normal = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
             
             normal_priors_img = dataset.normal_priors_images[idx][sensor.film().crop_size()[0]]
 
@@ -103,7 +105,7 @@ if __name__ == "__main__":
             # encourage opacity to be 0 or 1
             opacity_loss = opacity_entropy_loss(params['shape.opacities'])
 
-            total_loss = view_loss + normal_priors_loss + 0.1 * normal_loss + 0.1 * normal_tv_loss + 0.1 * opacity_loss
+            total_loss = view_loss + normal_priors_loss + normal_loss + normal_tv_loss + 0.1 * opacity_loss
 
             dr.backward(total_loss)
             
@@ -120,8 +122,8 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 
-            psnr_val = lpsnr(ref_img, img) / dataset.batch_size
-            psnr += psnr_val
+            rgb_psnr += lpsnr(ref_img, img) / dataset.batch_size
+            normal_mae += lmae(ref_normal, normal_img) / dataset.batch_size
 
         opt.step()
         params.update(opt)
@@ -129,9 +131,10 @@ if __name__ == "__main__":
         dataset.update_sensors(i)
 
         loss_np = np.asarray(loss)
-        psnr_np = np.asarray(psnr)
-        loss_str = f'Loss: {loss_np[0]:.4f}, Psnr: {psnr_np[0]:.4f}'
+        loss_str = f'Loss: {loss_np[0]:.4f}'
         pbar.set_description(loss_str)
+
+        pbar.set_postfix({'rgb': rgb_psnr, 'normal': normal_mae})
 
     #save ply
     gaussians.restore_from_params(params)
