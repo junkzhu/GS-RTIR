@@ -188,14 +188,17 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
            
             active_next &= (depth + 1 < self.max_depth) & si_cur.is_valid()
             # Next event estimation
-            active_em = active_next
+            active_em = mi.Bool(active_next)
             ds, em_weight = scene.sample_emitter_direction(si_cur, sampler.next_2d(active_em), False, active_em)
             active_em &= (ds.pdf != 0.0)
 
             with dr.resume_grad(when= not primal):
-                em_ray = si_cur.spawn_ray_to(ds.p)
+                em_ray = si_cur.spawn_ray(ds.d)
                 em_ray.d = dr.detach(em_ray.d)
-                occluded = self.ray_test(scene, sampler, em_ray, active_em)
+
+                em_ray_valid = dr.dot(N_cur, em_ray.d) > 0.0
+                occluded = self.shadow_ray_test(scene, sampler, em_ray, active_em & em_ray_valid)
+
                 visibility = dr.select(~occluded, 1.0, 0.0)
                 active_em &= ~occluded
                 
@@ -213,7 +216,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 Lr_dir = visibility * β * mis_direct * bsdf_value_em * em_weight
                 
             bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A_cur, R_cur, M_cur, N_cur, Vdirection) #get bsdf attributes
-            bsdf_weight = bsdf_val / dr.maximum(1e-8, bsdf_pdf)
+            bsdf_weight = bsdf_val / bsdf_pdf
             active_next &= (bsdf_pdf > 0.0)
             β *= mi.Spectrum(bsdf_weight)
             L_prev = L 
@@ -229,7 +232,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             # L += dr.select(first_vertex, 0.0, Lr_dir)
                  
             # Intersect next surface
-            ray_next = si_cur.spawn_ray(bsdf_dir)
+            ray_next = self.next_ray(scene, si_cur, bsdf_dir, active_next) # set offset to avoid self-occ
+            ray_next_valid = dr.dot(N_cur, ray_next.d) > 0.0
+            active_next &= ray_next_valid
+
             A_next, R_next, M_next, D_next, N_next, si_next_valid, weight_acc_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
             si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, si_next_valid)
 
@@ -240,13 +246,13 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
             if not primal:
                 sampler_clone = sampler.clone()
-                active_next_next = active_next & si_next.is_valid() & (depth + 2 < self.max_depth)
+                active_next_next = mi.Bool(active_next) & si_next.is_valid() & (depth + 2 < self.max_depth)
 
                 # next
-                active_em_next = active_next_next
+                active_em_next = mi.Bool(active_next_next)
                 ds_next, em_weight_next = scene.sample_emitter_direction(si_next, sampler_clone.next_2d(active_em_next), False, active_em_next)
                 
-                em_ray_next = si_next.spawn_ray_to(ds_next.p)
+                em_ray_next = si_next.spawn_ray(ds_next.d)
                 Ldirection_next = em_ray_next.d
                 Vdirection_next = dr.normalize(-ray_next.d)
                 Halfvector_next = dr.normalize(Ldirection_next + Vdirection_next)
@@ -256,10 +262,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 Lr_dir_next = β * mis_direct_next * bsdf_next_val * em_weight_next
 
                 # prev
-                active_em_prev =  active_prev
+                active_em_prev =  mi.Bool(active_prev)
                 ds_prev, em_weight_prev = scene.sample_emitter_direction(si_prev, sampler_clone.next_2d(active_em_prev), False, active_em_prev)
                 
-                em_ray_prev = si_prev.spawn_ray_to(ds_prev.p)
+                em_ray_prev = si_prev.spawn_ray(ds_prev.d)
                 Ldirection_prev = em_ray_prev.d
                 Vdirection_prev = dr.normalize(-ray_prev.d)
                 Halfvector_prev = dr.normalize(Ldirection_prev + Vdirection_prev)
@@ -304,10 +310,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
             depth[si_cur.is_valid()] += 1
             
-            active_prev = active
-            active = active_next
-            si_prev, ray_prev = si_cur, ray_cur
-            si_cur, ray_cur = si_next, ray_next
+            active_prev = mi.Bool(active)
+            active = mi.Bool(active_next)
+            si_prev, ray_prev = map(dr.detach, (si_cur, ray_cur))
+            si_cur, ray_cur = map(dr.detach, (si_next, ray_next))
             A_prev, R_prev, M_prev, D_prev, N_prev = map(dr.detach, (A_cur, R_cur, M_cur, D_cur, N_cur))
             A_cur, R_cur, M_cur, D_cur, N_cur = map(dr.detach,(A_next, R_next, M_next, D_next, N_next))
 

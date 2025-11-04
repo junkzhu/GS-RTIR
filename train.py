@@ -18,7 +18,7 @@ if __name__ == "__main__":
     dataset = Dataset(DATASET_PATH)
 
     gaussians = GaussianModel()
-    gaussians.restore_from_ply(PLY_PATH) #TODO:补充checkpoint读取
+    gaussians.restore_from_ply(PLY_PATH, RESET_ATTRIBUTE) #TODO:补充checkpoint读取
 
     ellipsoidsfactory = EllipsoidsFactory()
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
@@ -35,7 +35,7 @@ if __name__ == "__main__":
         },
         'integrator': {
             'type': INTEGRATOR,
-            'max_depth': 4,
+            'max_depth': MAX_BOUNCE_NUM,
             'gaussian_max_depth': 128,
             'hide_emitters': True,
             'use_mis': True
@@ -93,6 +93,9 @@ if __name__ == "__main__":
             metallic_img = aovs['metallic'][:, :, :1]
             depth_img = aovs['depth'][:, :, :1]
             normal_img = aovs['normal'][:, :, :3]
+            
+            normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
+            normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
 
             view_loss = l1(img, ref_img) / dataset.batch_size
             albedo_priors_loss = l2(albedo_img, albedo_priors_img) / dataset.batch_size
@@ -105,7 +108,7 @@ if __name__ == "__main__":
 
             #convert depth to fake_normal
             fake_normal_img = convert_depth_to_normal(depth_img, sensor)
-            normal_loss = lnormal(normal_img, fake_normal_img) / dataset.batch_size
+            normal_loss = lnormal_sqr(normal_img, fake_normal_img, normal_mask_flat) / dataset.batch_size
             normal_tv_loss = TV(fake_normal_img, normal_img) / dataset.batch_size
 
             priors_loss = 0.1 * albedo_priors_loss + 0.1 * roughness_priors_loss + 0.1 * normal_priors_loss
@@ -122,9 +125,7 @@ if __name__ == "__main__":
             roughness_bmp = resize_img(mi.Bitmap(roughness_img), dataset.target_res)
             #metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
             depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
-
-            normal_mask = np.any(normal_img != 0, axis=2, keepdims=True)
-            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, normal_img, 0))), dataset.target_res) 
+            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img+1)/2, 0))), dataset.target_res) 
 
             mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}' + ('.png')), rgb_bmp)
             mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}_ref' + ('.png')), rgb_ref_bmp)
@@ -137,7 +138,7 @@ if __name__ == "__main__":
             rgb_psnr += lpsnr(ref_img, img) / dataset.batch_size
             albedo_psnr += lpsnr(ref_albedo, albedo_img) / dataset.batch_size
             roughness_mse += l2(ref_roughness, roughness_img) / dataset.batch_size
-            normal_mae += lmae(ref_normal, normal_img) / dataset.batch_size
+            normal_mae += lmae(ref_normal, normal_img, normal_mask.squeeze()) / dataset.batch_size
 
         opt.step()
         params.update(opt)

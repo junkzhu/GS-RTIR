@@ -20,7 +20,7 @@ if __name__ == "__main__":
     dataset = Dataset(DATASET_PATH, REFINE_UPSAMPLE_ITER)
 
     gaussians = GaussianModel()
-    gaussians.restore_from_ply(PLY_PATH)
+    gaussians.restore_from_ply(PLY_PATH, RESET_ATTRIBUTE)
 
     ellipsoidsfactory = EllipsoidsFactory()
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
@@ -70,6 +70,9 @@ if __name__ == "__main__":
 
     seed = 0
 
+    psnr_list = []
+    mae_list = []
+
     pbar = tqdm.tqdm(range(REFINE_NITER))
     for i in pbar:
         loss = mi.Float(0.0)
@@ -78,7 +81,7 @@ if __name__ == "__main__":
         
         for idx, sensor in dataset.get_sensor_iterator(i):
             img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
-                                  spp=1, spp_grad=1,
+                                  spp=8, spp_grad=1,
                                   seed=seed, seed_grad=seed+1+len(dataset.sensors))
             
             seed += 1 + len(dataset.sensors)
@@ -91,6 +94,8 @@ if __name__ == "__main__":
             #aovs
             depth_img = aovs['depth'][:, :, :1]
             normal_img = aovs['normal'][:, :, :3]
+            normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
+            normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
             
             view_loss = l1(ref_img, img) / dataset.batch_size
 
@@ -99,13 +104,13 @@ if __name__ == "__main__":
 
             # convert depth to fake_normal
             fake_normal_img = convert_depth_to_normal(depth_img, sensor)
-            normal_loss = lnormal(normal_img, fake_normal_img) / dataset.batch_size
+            normal_loss = lnormal_sqr(ref_normal, normal_img, normal_mask_flat) / dataset.batch_size
             normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
 
             # encourage opacity to be 0 or 1
             opacity_loss = opacity_entropy_loss(params['shape.opacities'])
 
-            total_loss = view_loss + normal_priors_loss + normal_loss + normal_tv_loss + 0.1 * opacity_loss
+            total_loss = view_loss + normal_loss #+ normal_priors_loss + normal_loss + normal_tv_loss + 0.1 * opacity_loss
 
             dr.backward(total_loss)
             
@@ -114,8 +119,7 @@ if __name__ == "__main__":
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
             rgb_ref_bmp = resize_img(mi.Bitmap(ref_img),dataset.target_res)
             depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
-            normal_mask = np.any(normal_img != 0, axis=2, keepdims=True)
-            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, normal_img, 0))), dataset.target_res) 
+            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img+1)/2, 0))), dataset.target_res) 
 
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}' + ('.png')), rgb_bmp)
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_ref' + ('.png')), rgb_ref_bmp)
@@ -123,10 +127,26 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 
             rgb_psnr += lpsnr(ref_img, img) / dataset.batch_size
-            normal_mae += lmae(ref_normal, normal_img) / dataset.batch_size
+            normal_mae += lmae(ref_normal, normal_img, normal_mask.squeeze()) / dataset.batch_size
+
+        #grad restraint
+        # grad = dr.grad(params['shape.data'])
+        # grad_clamped = dr.clip(grad, -1e-4, 1e-4)
+        # dr.set_grad(params['shape.data'], grad_clamped)
 
         opt.step()
         params.update(opt)
+
+        psnr_list.append(rgb_psnr)
+        mae_list.append(normal_mae)
+
+        #scale value restraint
+        data = params['shape.data']
+        data_np = np.array(data)
+        N = data_np.shape[0] // 10
+        data_np = data_np.reshape(N, 10)
+        data_np[:, 3:6] = np.clip(data_np[:, 3:6], 1e-3, 0.05)
+        params['shape.data'] = dr.cuda.ad.Float(data_np.reshape(-1))
 
         dataset.update_sensors(i)
 
@@ -135,6 +155,9 @@ if __name__ == "__main__":
         pbar.set_description(loss_str)
 
         pbar.set_postfix({'rgb': rgb_psnr, 'normal': normal_mae})
+
+    plot_loss(psnr_list, label='PSNR', output_file=join(OUTPUT_REFINE_DIR, 'psnr.png'))
+    plot_loss(mae_list, label='MAE', output_file=join(OUTPUT_REFINE_DIR, 'mae.png'))
 
     #save ply
     gaussians.restore_from_params(params)

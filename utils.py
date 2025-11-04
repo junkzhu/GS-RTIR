@@ -94,3 +94,16 @@ def opacity_entropy_loss(opacities: mi.Float):
     """
     eps = 1e-6
     return -dr.mean(opacities * dr.log(opacities + eps) + (1 - opacities) * dr.log(1 - opacities + eps))
+
+def plot_loss(data, label, output_file):
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(4, 4))
+    ax.plot(data)
+    fig.canvas.toolbar_visible = 'fade-in-fade-out'
+    fig.canvas.footer_visible = False
+    fig.canvas.header_visible = False
+    ax.set_xlabel('Iteration')
+    plt.grid(True)
+    plt.ylabel(label)
+    plt.title(label + ' plot')
+    plt.savefig(output_file)

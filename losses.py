@@ -35,32 +35,33 @@ def TV(reference, image):
     tv_loss = dr.mean(tv_h * rgb_grad_h[:,:,dr.newaxis]) + dr.mean(tv_w * rgb_grad_w[:,:,dr.newaxis])
     return tv_loss
 
-def lnormal(reference, image):
+def lnormal(reference, image, mask_flat):
     img_flat = dr.reshape(image, (-1, 3))
     ref_flat = dr.reshape(reference, (-1, 3))
     cos_sim = dr.sum(img_flat * ref_flat, axis=-1)
-    loss = 1.0 - cos_sim
+
+    loss = dr.select(mask_flat, 1.0 - cos_sim, 0.0)
+
     return dr.mean(loss)
 
-def lmae(reference, image):
-    '''
-    Mean Angular Error
-    '''    
-    eps = 1e-8
+def lnormal_sqr(reference, image, mask_flat):
+    ref = dr.reshape(reference, (-1, 3))
+    img = dr.reshape(image, (-1, 3))
+    cos_sim = dr.sum(ref * img, axis=-1)
 
+    loss = dr.select(mask_flat, dr.square(1.0 - cos_sim), 0.0)
+    
+    return dr.mean(loss)
+
+def lmae(reference, image, mask):
+    '''
+    Normal Mean Angular Error
+    '''    
     reference = np.array(reference)
     image = np.array(image)
-
-    mask = (np.linalg.norm(reference, axis=-1) > eps) & (np.linalg.norm(image, axis=-1) > eps)
-
-    ref_norm = reference / np.clip(np.linalg.norm(reference, axis=-1, keepdims=True), eps, None)
-    img_norm = image / np.clip(np.linalg.norm(image, axis=-1, keepdims=True), eps, None)
-
-    cos_theta = np.sum(ref_norm * img_norm, axis=-1)
-
-    cos_theta = np.clip(cos_theta, -1.0, 1.0)
-    angle = np.degrees(np.arccos(cos_theta))
-
-    mae = np.mean(angle[mask])
+    
+    cos = np.where(mask, np.clip(np.sum(reference * image, axis=-1), -1.0, 1.0), 1.0)
+    
+    mae = np.mean(np.arccos(cos) * 180.0 / np.pi)
 
     return mae

@@ -65,7 +65,7 @@ class GaussianModel:
             self.spatial_lr_scale,
         ) = model_args
 
-    def restore_from_ply(self, path):
+    def restore_from_ply(self, path, reset_attribute = False):
         plydata = PlyData.read(path)
 
         xyz = np.stack((np.asarray(plydata.elements[0]["x"]),
@@ -108,14 +108,14 @@ class GaussianModel:
             normals = np.zeros((xyz.shape[0], 3))
             normals[:, 2] = 1.0
 
-        if all(n in prop_names for n in ["a_0", "a_1", "a_2"]):
+        if all(n in prop_names for n in ["a_0", "a_1", "a_2"]) and not reset_attribute:
             albedos = np.stack((np.asarray(plydata.elements[0]["a_0"]),
                                 np.asarray(plydata.elements[0]["a_1"]),
                                 np.asarray(plydata.elements[0]["a_2"])), axis=1)
         else:
             albedos = np.ones((xyz.shape[0], 3), dtype=np.float32) * 0.5
 
-        if "r" in prop_names:
+        if "r" in prop_names and not reset_attribute:
             roughnesses = np.asarray(plydata.elements[0]["r"])[..., np.newaxis]
         else:
             roughnesses = np.ones((xyz.shape[0], 1), dtype=np.float32)

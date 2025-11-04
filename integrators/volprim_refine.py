@@ -142,7 +142,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
         depth_acc = mi.Float(0.0)
         while dr.hint(active, label=f"BSDF ray tracing"):
-            si_cur = scene.ray_intersect(ray)
+            si_cur = scene.ray_intersect(ray, coherent=True, ray_flags=mi.RayFlags.All, active=active)
             active &= si_cur.is_valid() & si_cur.shape.is_ellipsoids()
 
             depth_acc += dr.select(active, si_cur.t, 0.0)

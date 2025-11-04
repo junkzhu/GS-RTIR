@@ -4,6 +4,8 @@ import mitsuba as mi
 
 PI = dr.pi
 EPS = 1e-8
+CLOSE_THRESHOLD = 1e-3
+MID_THRESHOLD = 3e-3
 
 class ReparamIntegrator(mi.SamplingIntegrator):
 
@@ -14,12 +16,12 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         self.hide_emitters = props.get('hide_emitters', False)
         self.use_mis = props.get('use_mis', False)
     
-    def SurfaceInteraction3f(self, ray, D, N, valid = True, offset = 5e-2):
+    def SurfaceInteraction3f(self, ray, D, N, valid = True, offset = 0.0):
         #create a new si as gaussian intersection
         si = dr.zeros(mi.SurfaceInteraction3f)
-        si.sh_frame.n = N
-        si.initialize_sh_frame() 
-        si.n = si.sh_frame.n
+        si.sh_frame = mi.Frame3f(N)
+
+        si.n = N
         si.wi = -ray.d
         si.t = dr.select((D > 0) & valid, D, si.t)
         si.p = ray.o + (1 - offset) * ray.d * D
@@ -133,22 +135,50 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return ray, weight, pos_f, det
 
     @dr.syntax
-    def ray_test(self, scene, sampler, ray, active):
+    def next_ray(self, scene, si, dir, active):
+        ray = mi.Ray3f(si.spawn_ray(dir))
+
+        active = mi.Mask(active)
+        o, d = ray.o, ray.d
+
+        while dr.hint(active, label=f"Ray Start Test"):
+            si_cur = scene.ray_intersect(ray, coherent=True, ray_flags=mi.RayFlags.All, active=active)
+            active &= si_cur.is_valid() & si_cur.shape.is_ellipsoids()
+
+            self_occ = mi.Bool(False)
+
+            ray_dist = dr.abs(dr.dot(si_cur.p - o, d))
+
+            self_occ[ray_dist < CLOSE_THRESHOLD] |= mi.Bool(True)
+
+            N = self.eval_normal(si_cur, ray, active) 
+            self_occ[ray_dist < MID_THRESHOLD] |= (dr.dot(N, ray.d) >= 0)
+
+            active &= (self_occ & (ray_dist < MID_THRESHOLD))
+            ray.o[active] = si_cur.p + ray.d * 1e-4  
+
+        return ray
+
+    @dr.syntax
+    def shadow_ray_test(self, scene, sampler, ray, active):
         #Stochastic Ray Tracing of Transparent 3D Gaussians, 3.3 section
         active=mi.Mask(active)
         ray = mi.Ray3f(dr.detach(ray))
+        o, d = ray.o, ray.d
     
-        occluded = mi.Bool(False)
+        occluded = ~active
         while dr.hint(active, label=f"Shadow Ray Test"):
-            si_cur = scene.ray_intersect(ray)
+            si_cur = scene.ray_intersect(ray, coherent=True, ray_flags=mi.RayFlags.All, active=active)
             active &= si_cur.is_valid() & si_cur.shape.is_ellipsoids()
 
-            N, _, _, _ =self.eval_bsdf_component(si_cur, ray, active)
-            NdotV = dr.dot(N, -ray.d)
+            self_occ = mi.Bool(False)
 
-            # NdotV = dr.dot(si_cur.sh_frame.n, -ray.d)
-            self_occ = NdotV < 0 #self-occlusion
+            ray_dist = dr.abs(dr.dot(si_cur.p - o, d))
+            self_occ[ray_dist < CLOSE_THRESHOLD] |= mi.Bool(True)
 
+            N = self.eval_normal(si_cur, ray, active) 
+            self_occ[ray_dist < MID_THRESHOLD] |= (dr.dot(N, ray.d) >= 0)
+             
             transmission = self.eval_transmission(si_cur, ray, active)
             alpha = 1.0 - transmission # opacity as a probability
 
@@ -215,6 +245,16 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         return 1.0 - dr.minimum(opacity * density, 0.9999)
 
+    def eval_normal(self, si, ray, active):
+        def eval(shape, si, ray, active):
+            if shape is not None and shape.is_ellipsoids():
+                normals = shape.eval_attribute_3("normals", si, active)
+                normals = dr.normalize(mi.Vector3f(normals))
+                return normals
+            else:
+                return mi.Vector3f(0.0)
+        return dr.dispatch(si.shape, eval, si, ray, active)
+            
     def eval_bsdf_component(self, si, ray, active):
         def eval(shape, si, ray, active):
             if shape is not None and shape.is_ellipsoids():
@@ -266,7 +306,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         depth_acc = mi.Float(0.0)
         while dr.hint(active, label=f"BSDF ray tracing"):
-            si_cur = scene.ray_intersect(ray)
+            si_cur = scene.ray_intersect(ray, coherent=True, ray_flags=mi.RayFlags.All, active=active)
             active &= si_cur.is_valid() & si_cur.shape.is_ellipsoids()
 
             depth_acc += dr.select(active, si_cur.t, 0.0)
@@ -294,7 +334,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
                 metallic = weight * metallic_val
                 metallic[~dr.isfinite(metallic)] = 0.0
 
-                depth[active] = weight * depth_acc
+                depth = weight * depth_acc
                 depth[~dr.isfinite(depth)] = 0.0
 
                 normal[active] = weight * normals_val
@@ -431,14 +471,16 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         diffuse = (1.0 - metallic) * (albedo / PI) * (1.0 - F_avg)
 
         bsdf_val = specular + diffuse
-        cosθ = dr.clamp(dr.dot(N, L), 1e-6, 1.0)
+
+        # The emitter is just a envmap, so we need to add cosθ here
+        cosθ = dr.clamp(dr.dot(N, L), 0.0, 1.0)
         bsdf_val = bsdf_val * cosθ
 
         # ---------- PDF ----------
         diffuse_prob  = (1.0 - metallic) * 0.5
         specular_prob = 1.0 - diffuse_prob
         #Sepcular
-        pdf_H = D * NdotH
+        pdf_H = D * dr.maximum(0.0, NdotH)
         pdf_spec = pdf_H / (4.0 * dr.maximum(1e-4, VdotH))
         #Diffuse
         cosθ = dr.dot(N, L)
@@ -507,6 +549,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         # To world
         L_world = si.to_world(L_local)
+        pdf = dr.select(dr.dot(si.n, L_world) > 0, pdf, 0.0)
+
         return L_world, pdf
     
     def bsdf(self, sampler, si, albedo, roughness, metallic, N, Vdir):
@@ -515,10 +559,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         Halfvector = dr.normalize(Ldir + Vdir)
         val, pdf1 = self.eval_bsdf(albedo, roughness, metallic, N, Vdir, Ldir, Halfvector)
 
-        #TODO:验证PDF是否一致
-
-        bsdf_pdf = pdf1
+        bsdf_pdf = dr.select(pdf1 > 0.0, pdf1, 1e-8) # pdf0 == pdf1 
         bsdf_dir = Ldir
-        bsdf_val = dr.select(bsdf_pdf > 0, val, 0.0)
+        bsdf_val = dr.select(bsdf_pdf > 0.0, val, 0.0)
         
         return bsdf_val, bsdf_dir, bsdf_pdf
