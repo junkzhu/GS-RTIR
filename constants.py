@@ -10,9 +10,12 @@ ENVMAP_PATH = 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr'
 
 REFINE_PATH = 'D:/dataset/point_cloud_refined.ply'
 
+RESET_ATTRIBUTE = True
+
 #--------------integrator--------------
 #INTEGRATOR = 'volprim_rf_basic'
 INTEGRATOR = 'gsprim_prb'
+MAX_BOUNCE_NUM = 4
 SPP = 8
 PRIMAL_SPP_MULT = 4
 
