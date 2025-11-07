@@ -175,7 +175,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
         active_prev = mi.Bool(active)
         while dr.hint(active, max_iterations=self.max_depth, label="Path Replay Backpropagation (%s)" % mode.name):
-            first_vertex = (depth == 0)
+            first_vertex = mi.Bool(depth == 0)
             active_next = mi.Bool(active)
             
             if not primal:
@@ -216,7 +216,8 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 Lr_dir = visibility * β * mis_direct * bsdf_value_em * em_weight
                 
             bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A_cur, R_cur, M_cur, N_cur, Vdirection) #get bsdf attributes
-            bsdf_weight = bsdf_val / bsdf_pdf
+            bsdf_weight = dr.select(bsdf_pdf > 0.0, bsdf_val / bsdf_pdf, 0.0)
+
             active_next &= (bsdf_pdf > 0.0)
             β *= mi.Spectrum(bsdf_weight)
             L_prev = L 
@@ -308,7 +309,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
                 self.ray_marching_loop(scene, sampler_clone, False, ray_cur, δA, δR, δM, δD, δN, result_temp, active_prev)
 
-            depth[si_cur.is_valid()] += 1
+            depth[active] += 1
             
             active_prev = mi.Bool(active)
             active = mi.Bool(active_next)

@@ -515,6 +515,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         u2_spec = r2
         alpha = roughness * roughness
 
+        # https://schuttejoe.github.io/post/ggximportancesamplingpart1/
         phi_h = 2.0 * dr.pi * u1_spec
         cos_theta_h = dr.sqrt((1.0 - u2_spec) / (1.0 + (alpha * alpha - 1.0) * u2_spec))
         sin_theta_h = dr.sqrt(dr.maximum(0.0, 1.0 - cos_theta_h * cos_theta_h))
@@ -559,7 +560,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         Halfvector = dr.normalize(Ldir + Vdir)
         val, pdf1 = self.eval_bsdf(albedo, roughness, metallic, N, Vdir, Ldir, Halfvector)
 
-        bsdf_pdf = dr.select(pdf1 > 0.0, pdf1, 1e-8) # pdf0 == pdf1 
+        bsdf_pdf = pdf1 # pdf0 == pdf1 
         bsdf_dir = Ldir
         bsdf_val = dr.select(bsdf_pdf > 0.0, val, 0.0)
         
