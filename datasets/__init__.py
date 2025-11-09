@@ -11,7 +11,7 @@ class Dataset:
     def __init__(
         self,
         source_path,
-        render_upsampler_iters=RENDER_UPSAMPLE_ITER,
+        render_upsampler_iters=TRAIN_UPSAMPLE_ITER,
         dataset_type="train"
     ) -> None:
         

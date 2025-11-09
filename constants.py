@@ -10,7 +10,7 @@ ENVMAP_PATH = 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr'
 
 REFINE_PATH = 'D:/dataset/point_cloud_refined.ply'
 
-RESET_ATTRIBUTE = True
+RESET_ATTRIBUTE = False
 
 #--------------integrator--------------
 #INTEGRATOR = 'volprim_rf_basic'
@@ -24,7 +24,7 @@ PRIMAL_SPP_MULT = 4
 BATCH_SIZE = 6
 NITER = 512
 OPTIMIZE_PARAMS = ['shape.normals','shape.albedos','shape.roughnesses']
-RENDER_UPSAMPLE_ITER = [64, 128, 256]
+TRAIN_UPSAMPLE_ITER = [64, 128, 256]
 
 REFINE_NITER = 128
 REFINE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.sh_coeffs']
