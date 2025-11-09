@@ -30,6 +30,10 @@ REFINE_NITER = 128
 REFINE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.sh_coeffs']
 REFINE_UPSAMPLE_ITER = [32, 64]
 
+#--------------render & metrics--------------
+RENDER_SPP = 128
+RENDER_UPSAMPLE_ITER = []
+
 #--------------folder--------------
 __SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__))
 
@@ -47,5 +51,8 @@ os.makedirs(OUTPUT_EXTRA_DIR, exist_ok=True)
 
 OUTPUT_PLY_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './ply'))
 os.makedirs(OUTPUT_PLY_DIR, exist_ok=True)
+
+OUTPUT_RENDER_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './renders'))
+os.makedirs(OUTPUT_RENDER_DIR, exist_ok=True)
 
 del __SCRIPT_DIR

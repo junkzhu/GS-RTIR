@@ -12,6 +12,7 @@ class Dataset:
         self,
         source_path,
         render_upsampler_iters=RENDER_UPSAMPLE_ITER,
+        dataset_type="train"
     ) -> None:
         
         self.batch_size = BATCH_SIZE
@@ -30,9 +31,9 @@ class Dataset:
 
         if os.path.exists(os.path.join(source_path, "sparse")):
             assert(1==2) #TODO COLMAP
-        elif os.path.exists(os.path.join(source_path, "transforms_train.json")):
+        elif os.path.exists(os.path.join(source_path, f"transforms_{dataset_type}.json")):
             self.sensors, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["Blender"](
-                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1]
+                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type
             )
 
             self.init_res = mi.ScalarPoint2i(np.array(self.target_res)//2**len(self.render_upsample_iter))

@@ -50,7 +50,7 @@ if __name__ == "__main__":
     
     #clear opacity
     n_ellipsoids = params['shape.opacities'].shape[0]
-    params['shape.opacities'] = dr.full(mi.Float, 0.01, n_ellipsoids)
+    #params['shape.opacities'] = dr.full(mi.Float, 0.01, n_ellipsoids)
 
     #clear sh & normal
     m_sh_coeffs = params['shape.sh_coeffs'].shape[0] // n_ellipsoids

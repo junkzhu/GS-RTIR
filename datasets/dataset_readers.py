@@ -192,6 +192,9 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
             d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         ref_roughness_images.append(d)
 
+    if split != 'train':
+        return sensors, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None
+
     albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset.png') for path in image_paths]
     albedo_priors_images=[]
     for idx, fn in enumerate(albedo_priors_paths):

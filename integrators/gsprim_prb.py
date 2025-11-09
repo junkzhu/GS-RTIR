@@ -182,10 +182,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 with dr.resume_grad():
                     dr.enable_grad(A_cur, R_cur, M_cur, D_cur, N_cur)
                     dr.disable_grad(si_prev)
-            
-            with dr.resume_grad(when=not primal):      
-                Le = β * mis_em * si_cur.emitter(scene).eval(si_cur)
-           
+                       
             active_next &= (depth + 1 < self.max_depth) & si_cur.is_valid()
             # Next event estimation
             active_em = mi.Bool(active_next)
@@ -215,15 +212,30 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 mis_direct = dr.detach(mis_weight(ds.pdf, bsdf_pdf_em))
                 Lr_dir = visibility * β * mis_direct * bsdf_value_em * em_weight
                 
-            bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A_cur, R_cur, M_cur, N_cur, Vdirection) #get bsdf attributes
-            bsdf_weight = dr.select(bsdf_pdf > 0.0, bsdf_val / bsdf_pdf, 0.0)
+                bsdf_val, bsdf_dir, bsdf_pdf = self.bsdf(sampler, si_cur, A_cur, R_cur, M_cur, N_cur, Vdirection) #get bsdf attributes
+                bsdf_weight = dr.select(bsdf_pdf > 0.0, bsdf_val / bsdf_pdf, 0.0)
 
-            active_next &= (bsdf_pdf > 0.0)
-            β *= mi.Spectrum(bsdf_weight)
-            L_prev = L 
+                active_next &= (bsdf_pdf > 0.0)
+                β = dr.detach(β) * mi.Spectrum(bsdf_weight)
+                     
+                # Intersect next surface
+                ray_next = self.next_ray(scene, si_cur, bsdf_dir, active_next) # set offset to avoid self-occ
+                ray_next_valid = dr.dot(N_cur, ray_next.d) > 0.0
+                active_next &= ray_next_valid
 
-            L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
+                A_next, R_next, M_next, D_next, N_next, si_next_valid, weight_acc_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
+                si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, si_next_valid)
+
+                # Compute MIS weight for the next vertex
+                ds = mi.DirectionSample3f(scene, si=si_next, ref=si_cur)
+                em_pdf = scene.pdf_emitter_direction(ref=si_cur, ds=ds, active=active_next)
+                mis_em = dr.detach(mis_weight(bsdf_pdf, em_pdf))
                 
+                Le = β * mis_em * si_next.emitter(scene).eval(dr.detach(si_next), active_next)
+           
+            L_prev = L
+            L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
+
             # render direct illumination
             # L += dr.select((depth == 1), Le, 0.0)
             # L += dr.select(first_vertex, Lr_dir, 0.0)
@@ -231,19 +243,6 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             # # render indirect illumination
             # L += dr.select((depth == 1), 0.0, Le)
             # L += dr.select(first_vertex, 0.0, Lr_dir)
-                 
-            # Intersect next surface
-            ray_next = self.next_ray(scene, si_cur, bsdf_dir, active_next) # set offset to avoid self-occ
-            ray_next_valid = dr.dot(N_cur, ray_next.d) > 0.0
-            active_next &= ray_next_valid
-
-            A_next, R_next, M_next, D_next, N_next, si_next_valid, weight_acc_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
-            si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, si_next_valid)
-
-            # Compute MIS weight for the next vertex
-            ds = mi.DirectionSample3f(scene, si=si_next, ref=si_cur)
-            em_pdf = scene.pdf_emitter_direction(ref=si_cur, ds=ds, active=active_next)
-            mis_em = dr.detach(mis_weight(bsdf_pdf, em_pdf))
 
             if not primal:
                 sampler_clone = sampler.clone()
