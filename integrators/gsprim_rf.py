@@ -112,7 +112,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 δR = δL * gradients['roughness'] + δR
                 δM = δL * gradients['metallic'] + δM
                 δD = δL * gradients['depth'] + δD
-                δN = δN
+                δN = δL * gradients['normal'] + δN
 
             # Launch Monte Carlo sampling in backward AD mode (2)
             L_2, valid_2, state_out_2, _= self.sample(
@@ -150,7 +150,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 result += dr.select(~active, si.emitter(scene, ~active).eval(si, ~active), 0.0)
             
             # ---------------------- Emitter sampling ----------------------
-            active_e = active
+            active_e = mi.Mask(active)
             with dr.suspend_grad():
                 ds, _ = scene.sample_emitter_direction(si, sampler.next_2d(active_e), False, active)
                 active_e &= (ds.pdf != 0.0)
@@ -191,7 +191,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             if self.use_mis:
                 with dr.suspend_grad():
                     bs_dir, bs_pdf = self.sample_bsdf(sampler, si, R, M, Vdirection)
-                    active_bsdf = active & (bs_pdf > 0.0)
+                    active_bsdf = mi.Mask(active) & (bs_pdf > 0.0)
 
                     ds = dr.zeros(mi.DirectionSample3f)
                     ds.d = bs_dir
@@ -203,7 +203,8 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 Halfvector = dr.normalize(bs_dir + Vdirection)
                 bsdf_val, _ = self.eval_bsdf(A, R, M, N, Vdirection, bs_dir, Halfvector)
                 shadow_ray = si.spawn_ray(bs_dir)
-                occluded = self.shadow_ray_test(scene, sampler, shadow_ray, active_bsdf)
+                shadow_ray_valid = dr.dot(N, shadow_ray.d) > 0.0
+                occluded = self.shadow_ray_test(scene, sampler, shadow_ray, active_bsdf & shadow_ray_valid)
                 visibility = dr.select(~occluded, 1.0, 0.0)
 
                 si_e = dr.zeros(mi.SurfaceInteraction3f)

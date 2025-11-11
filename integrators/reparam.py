@@ -323,7 +323,9 @@ class ReparamIntegrator(mi.SamplingIntegrator):
                 normals_val, albedo_val, roughness_val, metallic_val = self.eval_bsdf_component(si_cur, ray, active)
                 transmission = self.eval_transmission(si_cur, ray, active)
 
-                weight = T * (1.0 - transmission)
+                valid_gs = dr.dot(ray.d, normals_val) < 0.0
+
+                weight = dr.select(valid_gs, T * (1.0 - transmission), 0.0)
 
                 albedo = weight * albedo_val
                 albedo[~dr.isfinite(albedo)] = 0.0
@@ -337,7 +339,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
                 depth = weight * depth_acc
                 depth[~dr.isfinite(depth)] = 0.0
 
-                normal[active] = weight * normals_val
+                normal = weight * normals_val
                 normal[~dr.isfinite(normal)] = 0.0
 
             A[active] = (A + albedo) if primal else (A - albedo)
@@ -348,7 +350,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             N[active] = (N + normal) if primal else (N - normal)
             weight_acc[active]= (weight_acc + weight) if primal else (weight_acc - weight)
 
-            T[active] *= transmission
+            T[active] *= dr.select(valid_gs, transmission, 1.0)
 
             ray.o[active] = si_cur.p + ray.d * 1e-4
             depth_acc[active] += 1e-4
@@ -400,7 +402,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         #R = mi.math.srgb_to_linear(R) #TODO: 属性中存储的roughness如果是srgb空间的，优化中更容易收敛
 
         rand = sampler.next_1d()
-        active = (rand < (1-T)) & (dr.dot(N, ray.d) < 0.0)
+        active = (rand < (1-T))
 
         return A, R, M, D, N, active , weight_acc
 
@@ -474,7 +476,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         # The emitter is just a envmap, so we need to add cosθ here
         cosθ = dr.maximum(dr.dot(N, L), 0.0)
-        bsdf_val = bsdf_val * dr.detach(cosθ)
+        bsdf_val = bsdf_val * cosθ
 
         # ---------- PDF ----------
         diffuse_prob  = (1.0 - metallic) * 0.5
@@ -483,8 +485,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         pdf_H = D * dr.maximum(0.0, NdotH)
         pdf_spec = pdf_H / (4.0 * dr.maximum(1e-4, VdotH))
         #Diffuse
-        cosθ = dr.dot(N, L)
-        pdf_diff = dr.select(cosθ > 0, dr.detach(cosθ) * dr.rcp(dr.pi), 0.0)
+        cosθ = dr.maximum(dr.dot(N, L), 0.0)
+        pdf_diff = dr.select(cosθ > 0, cosθ * dr.rcp(dr.pi), 0.0)
 
         bsdf_pdf = specular_prob * pdf_spec + diffuse_prob * pdf_diff
 
