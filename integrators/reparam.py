@@ -400,7 +400,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         #R = mi.math.srgb_to_linear(R) #TODO: 属性中存储的roughness如果是srgb空间的，优化中更容易收敛
 
         rand = sampler.next_1d()
-        active = rand < (1-T)
+        active = (rand < (1-T)) & (dr.dot(N, ray.d) < 0.0)
 
         return A, R, M, D, N, active , weight_acc
 
@@ -444,10 +444,10 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         Evaluate BSDF Value
         """
         # Follow from https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf
-        NdotL = dr.clamp(dr.dot(N, L), 0.0, 1.0)
-        NdotV = dr.clamp(dr.dot(N, V), 0.0, 1.0)
-        NdotH = dr.clamp(dr.dot(N, H), 0.0, 1.0)
-        VdotH = dr.clamp(dr.dot(V, H), 0.0, 1.0)
+        NdotL = dr.maximum(dr.dot(N, L), 0.0)
+        NdotV = dr.maximum(dr.dot(N, V), 0.0)
+        NdotH = dr.maximum(dr.dot(N, H), 0.0)
+        VdotH = dr.maximum(dr.dot(V, H), 0.0)
 
         # --- Fresnel base F0 mix (dielectric 0.04 vs albedo for metal) ---
         F0_dielectric = mi.Color3f(0.04)
@@ -464,7 +464,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         # Specular numerator (Color) = D * G * F
         spec_num = F * D * G  # Color3f (broadcast D,G)
 
-        denom = 4.0 * (NdotV * NdotL + 1e-8)  # scalar
+        denom = 4.0 * dr.detach(NdotV * NdotL + 1e-8)  # scalar
         specular = spec_num / denom  # Color3f
 
         F_avg = (F[0] + F[1] + F[2]) / 3.0
@@ -473,8 +473,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         bsdf_val = specular + diffuse
 
         # The emitter is just a envmap, so we need to add cosθ here
-        cosθ = dr.clamp(dr.dot(N, L), 0.0, 1.0)
-        bsdf_val = bsdf_val * cosθ
+        cosθ = dr.maximum(dr.dot(N, L), 0.0)
+        bsdf_val = bsdf_val * dr.detach(cosθ)
 
         # ---------- PDF ----------
         diffuse_prob  = (1.0 - metallic) * 0.5
@@ -484,7 +484,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         pdf_spec = pdf_H / (4.0 * dr.maximum(1e-4, VdotH))
         #Diffuse
         cosθ = dr.dot(N, L)
-        pdf_diff = dr.select(cosθ > 0, cosθ * dr.rcp(dr.pi), 0.0)
+        pdf_diff = dr.select(cosθ > 0, dr.detach(cosθ) * dr.rcp(dr.pi), 0.0)
 
         bsdf_pdf = specular_prob * pdf_spec + diffuse_prob * pdf_diff
 
