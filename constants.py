@@ -18,6 +18,7 @@ INTEGRATOR = 'gsprim_prb'
 MAX_BOUNCE_NUM = 4
 SPP = 8
 PRIMAL_SPP_MULT = 4
+USE_MIS = True
 
 
 #--------------training--------------

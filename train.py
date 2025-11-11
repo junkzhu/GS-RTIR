@@ -38,7 +38,7 @@ if __name__ == "__main__":
             'max_depth': MAX_BOUNCE_NUM,
             'gaussian_max_depth': 128,
             'hide_emitters': True,
-            'use_mis': True
+            'use_mis': USE_MIS
         },
         'shape': {
             'type': 'ellipsoidsmesh',
@@ -62,6 +62,8 @@ if __name__ == "__main__":
     opt = mi.ad.Adam(lr=0.01, params=params)
     #opt.set_learning_rate({'shape.opacities':0.001})
     seed = 0
+
+    loss_list, rgb_PSNR_list, albedo_PSNR_list, roughness_MSE_list, normal_MAE_list = [], [], [], [], []
 
     pbar = tqdm.tqdm(range(NITER))
     for i in pbar:
@@ -101,6 +103,7 @@ if __name__ == "__main__":
             albedo_priors_loss = l2(albedo_img, albedo_priors_img) / dataset.batch_size
             roughness_priors_loss = l2(roughness_img, roughness_priors_img) / dataset.batch_size
             normal_priors_loss = l2(normal_img, normal_priors_img) / dataset.batch_size
+            priors_loss = albedo_priors_loss + roughness_priors_loss + normal_priors_loss
 
             #loss follow GS-IR
             view_tv_loss = TV(dr.concat([albedo_img, roughness_img, metallic_img], axis=2), ref_img) / dataset.batch_size
@@ -109,10 +112,15 @@ if __name__ == "__main__":
             #convert depth to fake_normal
             fake_normal_img = convert_depth_to_normal(depth_img, sensor)
             normal_loss = lnormal_sqr(normal_img, fake_normal_img, normal_mask_flat) / dataset.batch_size
-            normal_tv_loss = TV(fake_normal_img, normal_img) / dataset.batch_size
-
-            priors_loss = 0.1 * albedo_priors_loss + 0.1 * roughness_priors_loss + 0.1 * normal_priors_loss
-            total_loss = view_loss + view_tv_loss + 0.001 * lamb_loss + 0.1 * normal_loss + 0.1 * normal_tv_loss + priors_loss
+            
+            #tv loss
+            albedo_tv_loss = TV(albedo_priors_img, albedo_img) / dataset.batch_size
+            roughness_tv_loss = TV(roughness_priors_img, roughness_img) / dataset.batch_size
+            normal_tv_loss = TV(normal_priors_img, normal_img) / dataset.batch_size
+            tv_loss = view_tv_loss + albedo_tv_loss + roughness_tv_loss + normal_tv_loss
+  
+            #total loss
+            total_loss = view_loss + 0.1 * normal_loss + 0.02 * priors_loss + 0.01 * tv_loss + 0.001 * lamb_loss
 
             dr.backward(total_loss)
 
@@ -139,6 +147,12 @@ if __name__ == "__main__":
             albedo_psnr += lpsnr(ref_albedo, albedo_img) / dataset.batch_size
             roughness_mse += l2(ref_roughness, roughness_img) / dataset.batch_size
             normal_mae += lmae(ref_normal, normal_img, normal_mask.squeeze()) / dataset.batch_size
+            
+            loss_list.append(np.asarray(total_loss))
+            normal_MAE_list.append(np.asarray(normal_mae))
+            rgb_PSNR_list.append(np.asarray(rgb_psnr))
+            albedo_PSNR_list.append(np.asarray(albedo_psnr))
+            roughness_MSE_list.append(np.asarray(roughness_mse))
 
         opt.step()
         params.update(opt)
@@ -151,7 +165,13 @@ if __name__ == "__main__":
 
         pbar.set_postfix({'rgb': rgb_psnr, 'albedo': albedo_psnr, 'roughness': roughness_mse, 'normal': normal_mae})
 
-        if (i+1) % 100 == 0:
+        if (i+1) in dataset.render_upsample_iter:
+            plot_loss(loss_list, label='Total Loss', output_file=join(OUTPUT_DIR, 'total_loss.png'))
+            plot_loss(rgb_PSNR_list, label = "RGB PSNR", output_file=join(OUTPUT_DIR, 'rgb_psnr.png'))
+            plot_loss(albedo_PSNR_list, label='Albedo PSNR', output_file=join(OUTPUT_DIR, 'albedo_psnr.png'))
+            plot_loss(roughness_MSE_list, label='Roughness MSE', output_file=join(OUTPUT_DIR, 'roughness_mse.png'))
+            plot_loss(normal_MAE_list, label='Normal MAE', output_file=join(OUTPUT_DIR, 'normal_mae.png'))
+
             gaussians.restore_from_params(params)
             save_path = f"{OUTPUT_PLY_DIR}/iter_{i:03d}.ply"
             gaussians.save_ply(save_path)
