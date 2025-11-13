@@ -161,7 +161,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 ds, _ = scene.sample_emitter_direction(si, sampler.next_2d(active_e), False, active)
                 active_e &= (ds.pdf != 0.0)
                 shadow_ray = si.spawn_ray_to(ds.p)
-
+                shadow_ray.d = dr.detach(shadow_ray.d)
                 shadow_ray_valid = dr.dot(N, shadow_ray.d) > 0.0
                 occluded = self.shadow_ray_test(scene, sampler, shadow_ray, active_e & shadow_ray_valid)
 
@@ -210,6 +210,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 bsdf_val, bs_pdf = self.eval_bsdf(A, R, M, N, Vdirection, bs_dir, Halfvector)
 
                 shadow_ray = si.spawn_ray(bs_dir)
+                shadow_ray.d = dr.detach(shadow_ray.d)
                 shadow_ray_valid = dr.dot(N, shadow_ray.d) > 0.0
                 occluded = self.shadow_ray_test(scene, sampler, shadow_ray, active_bsdf & shadow_ray_valid)
                 visibility = dr.select(~occluded, 1.0, 0.0)

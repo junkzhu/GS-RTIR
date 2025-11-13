@@ -495,7 +495,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         bsdf_pdf = specular_prob * pdf_spec + diffuse_prob * pdf_diff
 
-        return bsdf_val, bsdf_pdf
+        return bsdf_val, dr.detach(bsdf_pdf)
     
     def sample_bsdf(self, sampler, si, roughness, metallic, V_world):
         """
@@ -510,12 +510,13 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         N = mi.Vector3f(0.0, 0.0, 1.0) # local normal
 
         # randoms
+        r0 = sampler.next_1d()
         r1 = sampler.next_1d()
         r2 = sampler.next_1d()
-
+        
         diffuse_prob  = (1.0 - metallic) * 0.5
         specular_prob = 1.0 - diffuse_prob
-        choose_specular = (r1 < specular_prob)
+        choose_specular = (r0 < specular_prob)
 
         # ---------- Specular ----------
         u1_spec = r1
@@ -559,7 +560,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         L_world = si.to_world(L_local)
         pdf = dr.select(dr.dot(si.n, L_world) > 0, pdf, 0.0)
 
-        return L_world, pdf
+        return L_world, dr.detach(pdf)
     
     def bsdf(self, sampler, si, albedo, roughness, metallic, N, Vdir):
         Ldir, pdf0 = self.sample_bsdf(sampler, si, roughness, metallic, Vdir)
