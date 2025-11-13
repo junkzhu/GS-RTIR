@@ -100,6 +100,8 @@ if __name__ == "__main__":
             normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
 
             view_loss = l1(img, ref_img) / dataset.batch_size
+
+            #priors loss
             albedo_priors_loss = l2(albedo_img, albedo_priors_img) / dataset.batch_size
             roughness_priors_loss = l2(roughness_img, roughness_priors_img) / dataset.batch_size
             normal_priors_loss = l2(normal_img, normal_priors_img) / dataset.batch_size
