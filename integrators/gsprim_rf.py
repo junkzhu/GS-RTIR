@@ -17,7 +17,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         with dr.suspend_grad():
             sampler, spp = self.prepare(sensor=sensor, seed=seed, spp=spp, aovs=self.aovs())
             ray, weight, pos, _ = self.sample_rays(scene, sensor, sampler)
-            L, valid, _aovs, _= self.sample(mode=dr.ADMode.Primal, scene=scene, sampler=sampler, ray=ray,
+            L, valid, _aovs, _, _= self.sample(mode=dr.ADMode.Primal, scene=scene, sampler=sampler, ray=ray,
                 depth=mi.UInt32(0), δL=None, δA=None, δR=None, δM=None, δD=None, δN=None, state_in=None, reparam=None, active=mi.Bool(True))
             
             #color
@@ -63,7 +63,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             sampler, spp = self.prepare(sensor, seed, spp, aovs)
             ray, weight, pos, det = self.sample_rays(scene, sensor, sampler)
 
-            L, valid, state_out, gradients = self.sample(
+            L, valid, _, gradients, state_out = self.sample(
                 mode=dr.ADMode.Forward, scene=scene, sampler=sampler, ray=ray, depth=mi.UInt32(0), 
                 δL=None, δA=None, δR=None, δM=None, δD=None, δN=None, 
                 state_in=None, reparam=None, active=mi.Bool(True))
@@ -115,7 +115,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 δN = δL * gradients['normal'] + δN
 
             # Launch Monte Carlo sampling in backward AD mode (2)
-            L_2, valid_2, state_out_2, _= self.sample(
+            L_2, valid_2, _, _, state_out_2= self.sample(
                 mode=dr.ADMode.Backward, scene=scene, sampler=sampler, ray=ray, depth=mi.UInt32(0), 
                 δL=δL, δA=δA, δR=δR, δM=δM, δD=δD, δN=δN,
                 state_in=state_out, active=mi.Bool(True))
@@ -137,11 +137,17 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         active = mi.Mask(active)
         result = mi.Spectrum(0.0)
 
-        A, R, M, D, N, active, weight_acc = self.ray_marching_loop(scene, sampler,(primal|forward), ray, δA, δR, δM, δD, δN, state_in, active)
+        A_raw, R_raw, M_raw, D_raw, N_raw, active, weight_acc = self.ray_marching_loop(scene, sampler,(primal|forward), ray, δA, δR, δM, δD, δN, state_in, active)
 
         with dr.resume_grad(when= forward):
             if forward:
-                dr.enable_grad(A, R, M, D, N)
+                dr.enable_grad(A_raw, R_raw, M_raw, D_raw, N_raw)
+
+            A = self.safe_clamp(A_raw, 0.0, 1.0)
+            R = self.safe_clamp(R_raw, 0.0, 1.0)
+            M = self.safe_clamp(M_raw, 0.0, 1.0)
+            N = self.safe_normalize(N_raw)
+            D = D_raw
 
             si = self.SurfaceInteraction3f(ray, D, N, active)
 
@@ -201,7 +207,8 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                     emitter_pdf = scene.pdf_emitter_direction(si, ds, active_bsdf)
                 
                 Halfvector = dr.normalize(bs_dir + Vdirection)
-                bsdf_val, _ = self.eval_bsdf(A, R, M, N, Vdirection, bs_dir, Halfvector)
+                bsdf_val, bs_pdf = self.eval_bsdf(A, R, M, N, Vdirection, bs_dir, Halfvector)
+
                 shadow_ray = si.spawn_ray(bs_dir)
                 shadow_ray_valid = dr.dot(N, shadow_ray.d) > 0.0
                 occluded = self.shadow_ray_test(scene, sampler, shadow_ray, active_bsdf & shadow_ray_valid)
@@ -221,11 +228,11 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             gradients = {}
             if forward:
                 dr.backward_from(result)                
-                δA = dr.grad(A) # ∂RGB/∂A
-                δR = dr.grad(R)
-                δM = dr.grad(M)
-                δD = dr.grad(D)
-                δN = dr.grad(N)
+                δA = dr.grad(A_raw) # ∂RGB/∂A
+                δR = dr.grad(R_raw)
+                δM = dr.grad(M_raw)
+                δD = dr.grad(D_raw)
+                δN = dr.grad(N_raw)
                 gradients = {
                     'albedo': δA,
                     'roughness': δR,
@@ -241,13 +248,20 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             'metallic': dr.select(active, mi.Spectrum(M), 0.0),
             'depth': dr.select(active, mi.Spectrum(D), 0.0),
             'normal': dr.select(active, N, 0.0),
-            
+        }
+
+        state_out = {
+            'albedo': dr.select(active, A_raw, 0.0),
+            'roughness': dr.select(active, mi.Spectrum(R_raw), 0.0),
+            'metallic': dr.select(active, mi.Spectrum(M_raw), 0.0),
+            'depth': dr.select(active, mi.Spectrum(D_raw), 0.0),
+            'normal': dr.select(active, N_raw, 0.0),
             'weight_acc': dr.select(active, weight_acc, 0.0),
             'Vdirection': dr.select(active, Vdirection, 0.0),
             'Ldirection': dr.select(active, Ldirection, 0.0)
         }
 
-        return mi.Spectrum(result), True, aovs, gradients
+        return mi.Spectrum(result), True, aovs, gradients, state_out
 
     def to_string(self):
         return f"GaussianPrimitiveRadianceFieldIntegrator[]"

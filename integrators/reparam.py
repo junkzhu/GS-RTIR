@@ -16,6 +16,16 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         self.hide_emitters = props.get('hide_emitters', False)
         self.use_mis = props.get('use_mis', False)
     
+    def safe_normalize(self, v):
+        n = dr.norm(v)
+        n_safe = dr.maximum(n, 1e-8)
+        v_normalized = v / n_safe
+        return dr.replace_grad(v_normalized, v)
+    
+    def safe_clamp(self, x, min_val=0.0, max_val=1.0):
+        clamped = dr.clamp(x, min_val, max_val)
+        return dr.replace_grad(clamped, x)
+
     def SurfaceInteraction3f(self, ray, D, N, valid = True, offset = 0.0):
         #create a new si as gaussian intersection
         si = dr.zeros(mi.SurfaceInteraction3f)
@@ -346,7 +356,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             R[active] = (R + roughness) if primal else (R - roughness)
             M[active] = (M + metallic) if primal else (M - metallic)
 
-            D[active] = (D + depth) if primal else (D - depth)
+            D[active] = (D + depth) if primal else (D - depth / weight_acc)
             N[active] = (N + normal) if primal else (N - normal)
             weight_acc[active]= (weight_acc + weight) if primal else (weight_acc - weight)
 
@@ -393,11 +403,6 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             #     active &= ~rr_active | rr_continue
 
         D = D / dr.maximum(weight_acc, 1e-8)
-        N = dr.normalize(N)
-        
-        A = dr.clamp(A, 0.0, 1.0)
-        R = dr.clamp(R, 0.05, 1.0)
-        M = dr.clamp(M, 0.0, 1.0)
 
         #R = mi.math.srgb_to_linear(R) #TODO: 属性中存储的roughness如果是srgb空间的，优化中更容易收敛
 
