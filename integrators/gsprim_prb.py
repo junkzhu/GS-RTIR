@@ -280,9 +280,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 sampler_clone = sampler.clone()
                 active_next_next = mi.Bool(active_next) & si_next.is_valid() & (depth + 2 < self.max_depth)
 
-                # next
+                # Lr_dir_next
                 active_em_next = mi.Bool(active_next_next)
-                ds_next, em_weight_next = scene.sample_emitter_direction(si_next, sampler_clone.next_2d(active_em_next), False, active_em_next)
+                ds_next, em_weight_next = scene.sample_emitter_direction(si_next, sampler_clone.next_2d(), False, active_em_next)      
+                active_em_next &= (ds_next.pdf != 0.0)
                 
                 em_ray_next = si_next.spawn_ray(ds_next.d)
                 Ldirection_next = em_ray_next.d
@@ -292,26 +293,36 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
                 mis_direct_next = mis_weight(ds_next.pdf, bsdf_next_pdf)
                 Lr_dir_next = β * mis_direct_next * bsdf_next_val * em_weight_next
+                
+                # Generate a detached BSDF sample at the next vertex
+                bsdf_dir_next, _ = self.sample_bsdf(sampler_clone, si_next, R_next, M_next, Vdirection_next)
 
-                # prev
-                active_em_prev =  mi.Bool(active_prev)
-                ds_prev, em_weight_prev = scene.sample_emitter_direction(si_prev, sampler_clone.next_2d(active_em_prev), False, active_em_prev)
-                
-                em_ray_prev = si_prev.spawn_ray(ds_prev.d)
-                Ldirection_prev = em_ray_prev.d
-                Vdirection_prev = dr.normalize(-ray_prev.d)
-                Halfvector_prev = dr.normalize(Ldirection_prev + Vdirection_prev)
-                bsdf_prev_val, bsdf_prev_pdf = self.eval_bsdf(A_prev, R_prev, M_prev, N_prev, Vdirection_prev, Ldirection_prev, Halfvector_prev)
-                
                 with dr.resume_grad(si_cur.p):
+                    wo_prev = dr.normalize(si_cur.p - si_prev.p)
+                    wi_next = dr.normalize(si_cur.p - si_next.p)
+
+                    si_next.wi = si_next.to_local(wi_next)
                     Le_next = β * mis_em * si_next.emitter(scene).eval(si_next, active_next)
                     L_next = L - dr.detach(Le_next) - dr.detach(Lr_dir_next)
+
+                    # prev bsdf val
+                    Ldirection_prev = wo_prev
+                    Vdirection_prev = dr.normalize(-ray_prev.d)
+                    Halfvector_prev = dr.normalize(Ldirection_prev + Vdirection_prev)
+                    bsdf_prev_val, _ = self.eval_bsdf(A_prev, R_prev, M_prev, N_prev, Vdirection_prev, Ldirection_prev, Halfvector_prev)
+
+                    # next bsdf val
+                    Ldirection_next = bsdf_dir_next
+                    Vdirection_next = dr.normalize(-ray_next.d)
+                    Halfvector_next = dr.normalize(Ldirection_next + Vdirection_next)
+                    bsdf_next_val, _ = self.eval_bsdf(A_next, R_next, M_next, N_next, Vdirection_next, Ldirection_next, Halfvector_next)
 
                     extra = mi.Spectrum(Le_next)
                     extra[~first_vertex] += L_prev * bsdf_prev_val / dr.detach(bsdf_prev_val)
                     extra[si_next.is_valid()] += L_next * bsdf_next_val / dr.detach(bsdf_next_val)
 
                 with dr.resume_grad():
+                    # cur bsdf val
                     bsdf_val_det = dr.detach(bsdf_weight * bsdf_pdf)
                     inv_bsdf_val_det = dr.select((bsdf_val_det != 0), dr.rcp(bsdf_val_det), 0)
                     Lr_ind = L * dr.replace_grad(1, inv_bsdf_val_det * bsdf_val)
@@ -331,7 +342,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
                 self.ray_marching_loop(scene, sampler_clone, False, ray_cur, δA, δR, δM, δD, δN, state_cur, active_prev)
 
-            depth[active] += 1
+            depth[si_cur.is_valid()] += 1
             
             state_cur = dr.detach(state_next)
             active_prev = mi.Bool(active)
