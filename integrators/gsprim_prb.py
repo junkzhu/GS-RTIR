@@ -330,15 +330,15 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     Lo = (Le + Lr_dir + Lr_ind) + extra
                     Lo[depth > self.max_depth] = 0
                     
-                    dr.backward_from(δL * Lo)
+                    dr.backward_from(Lo)
 
                     δA_cur, δR_cur, δM_cur, δD_cur, δN_cur = map(dr.grad, (A_cur, R_cur, M_cur, D_cur, N_cur))
 
-                δA = dr.select(first_vertex, δA + δA_cur, δA_cur)
-                δR = dr.select(first_vertex, δR + δR_cur, δR_cur)
-                δM = dr.select(first_vertex, δM + δM_cur, δM_cur)
-                δD = dr.select(first_vertex, δD + δD_cur, δD_cur)
-                δN = dr.select(first_vertex, δN + δN_cur, δN_cur)
+                δA = dr.select(first_vertex, δA + δA_cur * δL, δA_cur * δL) # ∂loss/∂RGB * ∂RGB/∂A + ∂loss/∂A = ∂loss/∂A
+                δR = dr.select(first_vertex, δR + δR_cur * δL, δR_cur * δL)
+                δM = dr.select(first_vertex, δM + δM_cur * δL, δM_cur * δL)
+                δD = dr.select(first_vertex, δD + δD_cur * δL, δD_cur * δL)
+                δN = dr.select(first_vertex, δN + δN_cur * δL, δN_cur * δL)
 
                 self.ray_marching_loop(scene, sampler_clone, False, ray_cur, δA, δR, δM, δD, δN, state_cur, active_prev)
 
