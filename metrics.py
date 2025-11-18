@@ -119,7 +119,7 @@ if __name__ == "__main__":
 
         metrics["psnr_albedo"].append(psnr_alb_val)
         metrics["ssim_albedo"].append(ssim_alb_val)
-        metrics["lpips_albedo"].append(ssim_alb_val)
+        metrics["lpips_albedo"].append(lpips_alb_val)
 
         metrics["l2_roughness"].append(l2_rough_val)
         metrics["lmae_normal"].append(lmae_norm_val)
