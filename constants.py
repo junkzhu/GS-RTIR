@@ -5,7 +5,7 @@ import os
 #--------------dataset--------------
 DATASET_PATH = 'D:/ZJK/hotdog_aov'
 
-PLY_PATH = 'D:/dataset/point_cloud.ply'
+PLY_PATH = 'D:/ZJK/GS-RTIR/outputs/ply/refined.ply'
 ENVMAP_PATH = 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr'
 
 REFINE_PATH = 'D:/dataset/point_cloud_refined.ply'

@@ -60,7 +60,7 @@ if __name__ == "__main__":
     for _, param in params.items():
         dr.enable_grad(param)
     opt = mi.ad.Adam(lr=0.01, params=params)
-    #opt.set_learning_rate({'shape.opacities':0.001})
+    opt.set_learning_rate({'shape.normals':0.001})
     seed = 0
 
     loss_list, rgb_PSNR_list, albedo_PSNR_list, roughness_MSE_list, normal_MAE_list = [], [], [], [], []
