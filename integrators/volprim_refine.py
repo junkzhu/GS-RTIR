@@ -171,7 +171,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             A[active] = (A + color) if primal else (A - color)
 
             D[active] = (D + depth) if primal else (D - depth / weight_acc)
-            N[active] = (N + normal) if primal else (N - normal)
+            N[active] = (N + normal) if primal else (N - normal / weight_acc)
             weight_acc[active]= (weight_acc + weight) if primal else (weight_acc - weight)
 
             β[active] *= transmission
@@ -206,8 +206,9 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             active &= num < self.gaussian_max_depth
 
         D = D / dr.maximum(weight_acc, 1e-8)
+        N = N / dr.maximum(weight_acc, 1e-8)
 
-        #A = mi.math.srgb_to_linear(A)
+        A = mi.math.srgb_to_linear(A)
 
         return A, D, N, (T<0.99), weight_acc
 
