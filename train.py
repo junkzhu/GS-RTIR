@@ -36,6 +36,7 @@ if __name__ == "__main__":
         'integrator': {
             'type': INTEGRATOR,
             'max_depth': MAX_BOUNCE_NUM,
+            'pt_rate': SPP_PT_RATE,
             'gaussian_max_depth': 128,
             'hide_emitters': True,
             'use_mis': USE_MIS
@@ -122,7 +123,7 @@ if __name__ == "__main__":
             tv_loss = view_tv_loss + albedo_tv_loss + roughness_tv_loss + normal_tv_loss
   
             #total loss
-            total_loss = view_loss + 0.1 * normal_loss + 0.02 * priors_loss + 0.01 * tv_loss + 0.001 * lamb_loss
+            total_loss = view_loss + 0.1 * normal_loss + 0.05 * priors_loss + 0.01 * tv_loss + 0.001 * lamb_loss
 
             dr.backward(total_loss)
 

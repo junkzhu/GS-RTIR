@@ -12,6 +12,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
     def __init__(self, props=mi.Properties()):
         super().__init__(props)
         self.max_depth = props.get('max_depth', 4)
+        self.pt_rate = props.get('pt_rate', 1.0)
         self.gaussian_max_depth = props.get('gaussian_max_depth', 128)
         self.hide_emitters = props.get('hide_emitters', False)
         self.use_mis = props.get('use_mis', False)
@@ -292,6 +293,93 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return dr.dispatch(si.shape, eval, si, ray, active)
 
     @dr.syntax
+    def ray_marching_loop_wo_rt(self, scene, ray, active):
+        #copy from volprim_rf_basic     
+        num = mi.UInt32(0)
+        active = mi.Mask(active)
+
+        ray = mi.Ray3f(dr.detach(ray))
+
+        L = mi.Spectrum(0.0)
+        A = mi.Spectrum(0.0)
+        R = mi.Float(0.0)
+        M = mi.Float(0.0)
+        D = mi.Float(0.0)
+        N = mi.Spectrum(0.0)
+        weight_acc = mi.Float(0.0)
+
+        T = mi.Float(1.0)
+        β = mi.Spectrum(1.0)
+        depth_acc = mi.Float(0.0)
+        
+        while dr.hint(active, label="Primitive splatting"):
+            si = scene.ray_intersect(ray, coherent=True, ray_flags=mi.RayFlags.All, active=active)
+            active &= si.is_valid() & si.shape.is_ellipsoids()
+
+            depth_acc += dr.select(active, si.t, 0.0)
+
+            Le = mi.Spectrum(0.0)
+            depth = mi.Float(0.0)
+            normal = mi.Spectrum(0.0)
+            albedo = mi.Spectrum(0.0)
+            roughness = mi.Float(0.0)
+            metallic = mi.Float(0.0)
+            weight = mi.Float(0.0)
+
+            emission = self.eval_sh_emission(si, ray, active)
+            normals_val, albedo_val, roughness_val, metallic_val = self.eval_bsdf_component(si, ray, active)
+            transmission = self.eval_transmission(si, ray, active)
+            
+            Le[active] = β * (1.0 - transmission) * emission
+            Le[~dr.isfinite(Le)] = 0.0
+
+            valid_gs = dr.dot(ray.d, normals_val) < 0.0
+
+            weight = dr.select(valid_gs, T * (1.0 - transmission), 0.0)
+
+            albedo = weight * albedo_val
+            albedo[~dr.isfinite(albedo)] = 0.0
+
+            roughness = weight * roughness_val
+            roughness[~dr.isfinite(roughness)] = 0.0
+
+            metallic = weight * metallic_val
+            metallic[~dr.isfinite(metallic)] = 0.0
+
+            depth = weight * depth_acc
+            depth[~dr.isfinite(depth)] = 0.0
+
+            normal = weight * normals_val
+            normal[~dr.isfinite(normal)] = 0.0
+
+            L[active] = (L + Le)
+            A[active] = (A + albedo)
+            R[active] = (R + roughness)
+            M[active] = (M + metallic)
+            D[active] = (D + depth)
+            N[active] = (N + normal)
+            weight_acc[active]= (weight_acc + weight)
+            
+            β[active] *= transmission
+            T[active] *= dr.select(valid_gs, transmission, 1.0)
+
+            ray.o[active] = si.p + ray.d * 1e-4
+ 
+            depth_acc[active] += 1e-4
+
+            active &= si.is_valid()
+            num[active] += 1
+
+            active &= T > 0.01
+            active &= num < self.gaussian_max_depth
+
+        L = mi.math.srgb_to_linear(L)
+        D = D / dr.maximum(weight_acc, 1e-8)
+        N = N / dr.maximum(weight_acc, 1e-8)
+
+        return L, A, R, M, D, N
+
+    @dr.syntax
     def ray_marching_loop(self, scene, sampler, primal, ray, δA, δR, δM, δD, δN, state_in, active):
         
         num = mi.UInt32(0)
@@ -357,7 +445,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             M[active] = (M + metallic) if primal else (M - metallic)
 
             D[active] = (D + depth) if primal else (D - depth / weight_acc)
-            N[active] = (N + normal) if primal else (N - normal)
+            N[active] = (N + normal) if primal else (N - normal / weight_acc)
             weight_acc[active]= (weight_acc + weight) if primal else (weight_acc - weight)
 
             T[active] *= dr.select(valid_gs, transmission, 1.0)
@@ -403,6 +491,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             #     active &= ~rr_active | rr_continue
 
         D = D / dr.maximum(weight_acc, 1e-8)
+        N = N / dr.maximum(weight_acc, 1e-8)
 
         #R = mi.math.srgb_to_linear(R) #TODO: 属性中存储的roughness如果是srgb空间的，优化中更容易收敛
 

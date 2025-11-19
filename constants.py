@@ -8,7 +8,7 @@ DATASET_PATH = 'D:/ZJK/hotdog_aov'
 PLY_PATH = 'D:/ZJK/GS-RTIR/outputs/ply/refined.ply'
 ENVMAP_PATH = 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr'
 
-REFINE_PATH = 'D:/dataset/point_cloud_refined.ply'
+REFINE_PATH = 'D:/ZJK/GS-RTIR/outputs/ply/point_refined.ply'
 
 RESET_ATTRIBUTE = False
 
@@ -17,6 +17,7 @@ RESET_ATTRIBUTE = False
 INTEGRATOR = 'gsprim_prb'
 MAX_BOUNCE_NUM = 4
 SPP = 8
+SPP_PT_RATE = 1.0 # not necessary
 PRIMAL_SPP_MULT = 4
 USE_MIS = True
 

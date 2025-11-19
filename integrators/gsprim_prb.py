@@ -17,8 +17,12 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         with dr.suspend_grad():
             sampler, spp = self.prepare(sensor=sensor, seed=seed, spp=spp, aovs=self.aovs())
             ray, weight, pos, _ = self.sample_rays(scene, sensor, sampler)
+            
+            #hybrid trick
+            mask_pt = sampler.next_1d() < self.pt_rate
+            
             L, valid, _aovs, _= self.sample(mode=dr.ADMode.Primal, scene=scene, sampler=sampler, ray=ray,
-                depth=mi.UInt32(0), δL=None, δA=None, δR=None, δM=None, δD=None, δN=None, state_in=None, reparam=None, active=mi.Bool(True))
+                depth=mi.UInt32(0), δL=None, δA=None, δR=None, δM=None, δD=None, δN=None, state_in=None, reparam=None, active=mi.Bool(mask_pt))
             
             #color
             block = sensor.film().create_block()
@@ -136,12 +140,16 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         valid_ray = (not self.hide_emitters) and scene.environment() is not None
 
         # --------------------- Configure loop state ----------------------
-        active = mi.Bool(active)
+        mask_pt = mi.Mask(active)
+        active = mi.Mask(active)
         
         depth = mi.UInt32(0)
 
+        result = mi.Spectrum(0.0)
         L = mi.Spectrum(0 if primal else state_in['result'])
         δL = mi.Spectrum(δL if δL is not None else 0)
+
+        aov_A, aov_R, aov_M, aov_D, aov_N = mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0)
 
         β = mi.Spectrum(1)
         mis_em = mi.Float(1)
@@ -157,7 +165,18 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         D_prev = mi.Float(0.0)
         N_prev = mi.Spectrum(0.0)
 
-        #pi info
+        # hybrid trick (just for render)
+        if primal:   
+            L_wo_rt, A_wo_rt, R_wo_rt, M_wo_rt, D_wo_rt, N_wo_rt = self.ray_marching_loop_wo_rt(scene, ray, ~mask_pt)
+            result[~mask_pt] += L_wo_rt
+            
+            aov_A[~mask_pt] += self.safe_clamp(A_wo_rt, 0.0, 1.0)
+            aov_R[~mask_pt] += self.safe_clamp(R_wo_rt, 0.0, 1.0)
+            aov_M[~mask_pt] += self.safe_clamp(M_wo_rt, 0.0, 1.0)
+            aov_N[~mask_pt] += self.safe_normalize(N_wo_rt)
+            aov_D[~mask_pt] += D_wo_rt
+
+        # ray tracing
         A_cur_raw, R_cur_raw, M_cur_raw, D_cur_raw, N_cur_raw, si_valid, weight_acc = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
         
         state_cur = {
@@ -180,12 +199,19 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         
         valid_ray = active # output mask
         
+        #aov & state_outs
+        aov_A[mask_pt] += dr.select(active, A_cur, 0.0)
+        aov_R[mask_pt] += dr.select(active, mi.Spectrum(R_cur), 0.0)
+        aov_M[mask_pt] += dr.select(active, mi.Spectrum(M_cur), 0.0)
+        aov_N[mask_pt] += dr.select(active, N_cur, 0.0)
+        aov_D[mask_pt] += dr.select(active, D_cur, 0.0)
+
         aovs = {
-            'albedo': dr.select(active, A_cur, 0.0),
-            'roughness': dr.select(active, mi.Spectrum(R_cur), 0.0),
-            'metallic': dr.select(active, mi.Spectrum(M_cur), 0.0),
-            'depth': dr.select(active, mi.Spectrum(D_cur), 0.0),
-            'normal': dr.select(active, N_cur, 0.0)
+            'albedo': aov_A,
+            'roughness': aov_R,
+            'metallic': aov_M,
+            'depth': aov_D,
+            'normal': aov_N
         }
 
         active_prev = mi.Bool(active)
@@ -352,7 +378,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             A_prev, R_prev, M_prev, D_prev, N_prev = map(dr.detach, (A_cur, R_cur, M_cur, D_cur, N_cur))
             A_cur, R_cur, M_cur, D_cur, N_cur = map(dr.detach,(A_next, R_next, M_next, D_next, N_next))
 
-        result = dr.select(valid_ray, mi.Spectrum(L), 0.0)
+        result[mask_pt] += dr.select(valid_ray, mi.Spectrum(L), 0.0)
         aovs['result'] = result
 
         gradients = {}

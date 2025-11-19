@@ -138,12 +138,23 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         primal = (mode == dr.ADMode.Primal)
         forward = (mode == dr.ADMode.Forward)
         
+        mask_pt = mi.Mask(active)
         active = mi.Mask(active)
         result = mi.Spectrum(0.0)
+        aov_A, aov_R, aov_M, aov_D, aov_N = mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0)
 
         # hybrid trick (just for render)
-        result[~active] += self.eval_sh_loop(scene, ray, ~active)
+        if primal:
+            L_wo_rt, A_wo_rt, R_wo_rt, M_wo_rt, D_wo_rt, N_wo_rt = self.ray_marching_loop_wo_rt(scene, ray, ~mask_pt)
+            result[~mask_pt] += L_wo_rt
+            
+            aov_A[~mask_pt] += self.safe_clamp(A_wo_rt, 0.0, 1.0)
+            aov_R[~mask_pt] += self.safe_clamp(R_wo_rt, 0.0, 1.0)
+            aov_M[~mask_pt] += self.safe_clamp(M_wo_rt, 0.0, 1.0)
+            aov_N[~mask_pt] += self.safe_normalize(N_wo_rt)
+            aov_D[~mask_pt] += D_wo_rt
 
+        # ray tracing
         A_raw, R_raw, M_raw, D_raw, N_raw, active, weight_acc = self.ray_marching_loop(scene, sampler,(primal|forward), ray, δA, δR, δM, δD, δN, state_in, active)
 
         with dr.resume_grad(when= forward):
@@ -249,13 +260,19 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                     'normal': δN
                 }
 
-        #aov & state_out
+        #aov & state_outs
+        aov_A[mask_pt] += dr.select(active, A, 0.0)
+        aov_R[mask_pt] += dr.select(active, mi.Spectrum(R), 0.0)
+        aov_M[mask_pt] += dr.select(active, mi.Spectrum(M), 0.0)
+        aov_N[mask_pt] += dr.select(active, N, 0.0)
+        aov_D[mask_pt] += dr.select(active, D, 0.0)
+
         aovs = {
-            'albedo': dr.select(active, A, 0.0),
-            'roughness': dr.select(active, mi.Spectrum(R), 0.0),
-            'metallic': dr.select(active, mi.Spectrum(M), 0.0),
-            'depth': dr.select(active, mi.Spectrum(D), 0.0),
-            'normal': dr.select(active, N, 0.0),
+            'albedo': aov_A,
+            'roughness': aov_R,
+            'metallic': aov_M,
+            'depth': aov_D,
+            'normal': aov_N,
         }
 
         state_out = {
