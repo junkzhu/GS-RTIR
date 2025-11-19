@@ -15,7 +15,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         with dr.suspend_grad():
             sampler, spp = self.prepare(sensor=sensor, seed=seed, spp=spp, aovs=self.aovs())
             ray, weight, pos, _ = self.sample_rays(scene, sensor, sampler)
-            L, valid, _aovs= self.sample(mode=dr.ADMode.Primal, scene=scene, sampler=sampler, ray=ray,
+            L, valid, _aovs, _, _= self.sample(mode=dr.ADMode.Primal, scene=scene, sampler=sampler, ray=ray,
                 depth=mi.UInt32(0), δL=None, δA=None, δD=None, δN=None, state_in=None, reparam=None, active=mi.Bool(True))
             
             #color
@@ -61,7 +61,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             sampler, spp = self.prepare(sensor, seed, spp, aovs)
             ray, weight, pos, det = self.sample_rays(scene, sensor, sampler)
 
-            L, valid, state_out = self.sample(
+            L, valid,  _, gradients, state_out = self.sample(
                 mode=dr.ADMode.Forward, scene=scene, sampler=sampler, ray=ray, depth=mi.UInt32(0), 
                 δL=None, δA=None, δD=None, δN=None, 
                 state_in=None, reparam=None, active=mi.Bool(True))
@@ -101,12 +101,12 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 δN = dr.grad(normal_state_out)      # ∂loss/∂Normal
 
                 #Convert ∂loss/∂RGB to ∂loss/∂A, ∂loss/∂R, ∂loss/∂M
-                δA = δL # ∂loss/∂RGB * ∂RGB/∂A + ∂loss/∂A = ∂loss/∂A 
-                δD = δD
-                δN = δN
+                δA = δL * gradients['color'] # ∂loss/∂RGB * ∂RGB/∂A + ∂loss/∂A = ∂loss/∂A 
+                δD = δD * gradients['depth']
+                δN = δN * gradients['normal']
 
             # Launch Monte Carlo sampling in backward AD mode (2)
-            L_2, valid_2, state_out_2 = self.sample(
+            L_2, valid_2, _, _, state_out_2 = self.sample(
                 mode=dr.ADMode.Backward, scene=scene, sampler=sampler, ray=ray, depth=mi.UInt32(0), 
                 δL=δL, δA=δA, δD=δD, δN=δN,
                 state_in=state_out, active=mi.Bool(True))
@@ -131,7 +131,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         A = mi.Spectrum(0.0 if primal else state_in['color'])
         D = mi.Float(0.0 if primal else state_in['depth'][0])
         N = mi.Spectrum(0.0 if primal else state_in['normal'])
-        weight_acc = mi.Float(0.0 if primal else state_in['weight_acc'][0])
+        weight_acc = mi.Float(0.0 if primal else state_in['weight_acc'])
 
         δA = mi.Spectrum(δA if δA is not None else 0)
         δD = mi.Spectrum(δD if δD is not None else 0)
@@ -141,7 +141,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         T = mi.Float(1.0) #for aovs
 
         depth_acc = mi.Float(0.0)
-        while dr.hint(active, label=f"BSDF ray tracing"):
+        while dr.hint(active, label="Ray Marching"):
             si_cur = scene.ray_intersect(ray, coherent=True, ray_flags=mi.RayFlags.All, active=active)
             active &= si_cur.is_valid() & si_cur.shape.is_ellipsoids()
 
@@ -170,7 +170,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
             A[active] = (A + color) if primal else (A - color)
 
-            D[active] = (D + depth) if primal else (D - depth)
+            D[active] = (D + depth) if primal else (D - depth / weight_acc)
             N[active] = (N + normal) if primal else (N - normal)
             weight_acc[active]= (weight_acc + weight) if primal else (weight_acc - weight)
 
@@ -203,13 +203,11 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             β_max = dr.max(β)
 
             active &= β_max > 0.01
-            active &= num < self.max_depth
+            active &= num < self.gaussian_max_depth
 
         D = D / dr.maximum(weight_acc, 1e-8)
-        N = dr.normalize(N + 1e-8)
-        
-        A = dr.clamp(A, 0.0, 1.0)
-        A = mi.math.srgb_to_linear(A)
+
+        #A = mi.math.srgb_to_linear(A)
 
         return A, D, N, (T<0.99), weight_acc
 
@@ -221,20 +219,54 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         
         active = mi.Mask(active)
         result = mi.Spectrum(0.0)
+        result_N = mi.Spectrum(0.0)
+        result_D = mi.Spectrum(0.0)
 
-        A, D, N, active, weight_acc = self.ray_marching_loop(scene, (primal|forward), ray, δA, δD, δN, state_in, active)
+        A_raw, D_raw, N_raw, active, weight_acc = self.ray_marching_loop(scene, (primal|forward), ray, δA, δD, δN, state_in, active)
 
-        result += dr.select(active, A, 0.0)
+        with dr.resume_grad(when= forward):
+            if forward:
+                dr.enable_grad(A_raw, D_raw, N_raw)
+            
+            A = self.safe_clamp(A_raw, 0.0, 1.0)
+            N = self.safe_normalize(N_raw)
+            D = D_raw
+
+            result[active] += A
+            result_N[active] += N
+            result_D[active] += D
+
+            gradients = {}
+            if forward:
+                dr.backward_from(result)
+                dr.backward_from(result_N)
+                dr.backward_from(result_D)
+
+                δA = dr.grad(A_raw) # ∂RGB/∂A
+                δD = dr.grad(D_raw)
+                δN = dr.grad(N_raw)
+
+                gradients = {
+                    'color': δA,
+                    'depth': δD,
+                    'normal': δN
+                }
 
         #aov & state_out
         aovs = {
-            'color': dr.select(active, A, 0.0),
-            'depth': dr.select(active, mi.Spectrum(D), 0.0),
-            'normal': dr.select(active, N, 0.0),
-            'weight_acc': dr.select(active, weight_acc, 0.0),
+            'color': dr.select(active, result, 0.0),
+            'depth': dr.select(active, result_D, 0.0),
+            'normal': dr.select(active, result_N, 0.0)
         }
 
-        return mi.Spectrum(result), True, aovs
+        state_out = {
+            'color': dr.select(active, A_raw, 0.0),
+            'depth': dr.select(active, mi.Spectrum(D_raw), 0.0),
+            'normal': dr.select(active, N_raw, 0.0),
+            'weight_acc': dr.select(active, weight_acc, 0.0)
+        }
+
+        return mi.Spectrum(result), True, aovs, gradients, state_out
 
     def to_string(self):
         return f"VolumetricPrimitiveRadianceFieldIntegrator[]"

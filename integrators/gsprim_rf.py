@@ -17,8 +17,12 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         with dr.suspend_grad():
             sampler, spp = self.prepare(sensor=sensor, seed=seed, spp=spp, aovs=self.aovs())
             ray, weight, pos, _ = self.sample_rays(scene, sensor, sampler)
-            L, valid, _aovs, _, _= self.sample(mode=dr.ADMode.Primal, scene=scene, sampler=sampler, ray=ray,
-                depth=mi.UInt32(0), δL=None, δA=None, δR=None, δM=None, δD=None, δN=None, state_in=None, reparam=None, active=mi.Bool(True))
+
+            #hybrid trick
+            mask_pt = sampler.next_1d() < self.pt_rate
+
+            L, valid, _aovs, _, _= self.sample(mode=dr.ADMode.Primal, scene=scene, sampler=sampler, ray=ray, 
+                depth=mi.UInt32(0), δL=None, δA=None, δR=None, δM=None, δD=None, δN=None, state_in=None, reparam=None, active=mi.Bool(mask_pt))
             
             #color
             block = sensor.film().create_block()
@@ -136,6 +140,9 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         
         active = mi.Mask(active)
         result = mi.Spectrum(0.0)
+
+        # hybrid trick (just for render)
+        result[~active] += self.eval_sh_loop(scene, ray, ~active)
 
         A_raw, R_raw, M_raw, D_raw, N_raw, active, weight_acc = self.ray_marching_loop(scene, sampler,(primal|forward), ray, δA, δR, δM, δD, δN, state_in, active)
 

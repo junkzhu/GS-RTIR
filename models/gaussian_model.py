@@ -231,7 +231,7 @@ class GaussianModel:
         vertices['f_dc_2'] = features_dc[:, 2].astype(np.float32)
 
         f_rest = self._features_rest.numpy() if isinstance(self._features_rest, torch.Tensor) else self._features_rest
-        f_rest = f_rest.reshape(N, -1)
+        f_rest = f_rest.reshape(N, 15, 3).transpose(0, 2, 1).reshape(N, -1)
         for i in range(f_rest.shape[1]):
             vertices[f'f_rest_{i}'] = f_rest[:, i].astype(np.float32)
 
