@@ -24,16 +24,15 @@ if __name__ == "__main__":
     ellipsoidsfactory = EllipsoidsFactory()
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
 
-    scene_dict = mi.load_dict({
+    # original envmap
+    envmap = mi.Bitmap(ENVMAP_PATH)
+    envmap = np.array(envmap)
+    mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'ref' + ('.exr')), envmap)
+
+
+    #---------------------------------- config ----------------------------------
+    scene_config = {
         'type': 'scene',
-        #TODO:换成可以优化的自定义光源
-        'emitter': { 
-            'type': 'envmap',
-            'id': 'EnvironmentMapEmitter',
-            'filename': ENVMAP_PATH,
-            'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
-                        mi.ScalarTransform4f.rotate([1, 0, 0], 90)
-        },
         'integrator': {
             'type': INTEGRATOR,
             'max_depth': MAX_BOUNCE_NUM,
@@ -55,10 +54,29 @@ if __name__ == "__main__":
             'roughnesses': gaussians_attributes['roughnesses'],
             'metallics': gaussians_attributes['metallics']
         }
-    })
+    }
+
+    if OPTIMIZE_ENVMAP:
+        scene_config['envmap'] = {
+            'type': 'vMF',
+            'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
+            'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
+                        mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+        }
+        OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
+    else:
+        scene_config['emitter'] = {
+            'type': 'envmap',
+            'id': 'EnvironmentMapEmitter',
+            'filename': ENVMAP_PATH,
+            'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
+                        mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+        }
+
+    scene_dict = mi.load_dict(scene_config)
 
     params = mi.traverse(scene_dict)
-    params.keep(OPTIMIZE_PARAMS) 
+    params.keep(OPTIMIZE_PARAMS)
     for _, param in params.items():
         dr.enable_grad(param)
     opt = mi.ad.Adam(lr=0.01, params=params)
@@ -168,6 +186,13 @@ if __name__ == "__main__":
         pbar.set_description(loss_str)
 
         pbar.set_postfix({'rgb': rgb_psnr, 'albedo': albedo_psnr, 'roughness': roughness_mse, 'normal': normal_mae})
+
+
+        # save envmap
+        if OPTIMIZE_ENVMAP:
+            envmap_img = render_envmap_bitmap(params)
+            mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
+
 
         if (i+1) in dataset.render_upsample_iter:
             plot_loss(loss_list, label='Total Loss', output_file=join(OUTPUT_DIR, 'total_loss.png'))

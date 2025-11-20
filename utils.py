@@ -1,8 +1,10 @@
 import drjit as dr
 import mitsuba as mi
 import tqdm
-
+from jinja2 import Template
 import numpy as np
+import torch
+from emitter.sgenvmap_util import SG2Envmap
 
 def resize_img(img, target_res, smooth=False):
     """Resizes a Mitsuba Bitmap using either a box filter (smooth=False)
@@ -107,3 +109,26 @@ def plot_loss(data, label, output_file):
     plt.ylabel(label)
     plt.title(label + ' plot')
     plt.savefig(output_file)
+
+def get_lgtSGs(params):
+    envmap_template = """{% for i in range(num_sgs) %}
+lobe_{{ i }} = params['envmap.lgtSGslobe_{{ i }}'].numpy()
+lambda_{{ i }} = params['envmap.lgtSGslambda_{{ i }}'].numpy()
+mu_{{ i }} = params['envmap.lgtSGsmu_{{ i }}'].numpy()
+{% endfor %}
+lgtSGs = [ {% for i in range(num_sgs) %} lobe_{{ i }}, lambda_{{ i }}, mu_{{ i }} {% if not loop.last %}, {% endif %} {% endfor %} ]
+"""
+    envmap_template = Template(envmap_template)
+    envmap_data = envmap_template.render(num_sgs=8)
+    # Execute into an isolated local dict and include params in that dict
+    envmap_locals = {'params': params}
+    exec(envmap_data, globals(), envmap_locals)
+
+    # extract lgtSGs and params (if modified by the exec code)
+    return np.array(np.concatenate([np.ravel(x).astype(np.float32) for x in envmap_locals.get('lgtSGs')]), dtype=np.float32).reshape(-1, 7)
+
+def render_envmap_bitmap(params):
+    lgtSGs = get_lgtSGs(params)
+    lgtSGs_torch = torch.tensor(lgtSGs, dtype=torch.float32)
+    envmap = SG2Envmap(lgtSGs_torch, 256, 512).detach().cpu().numpy()
+    return mi.Bitmap(envmap)

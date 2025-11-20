@@ -23,6 +23,9 @@ SPP_PT_RATE = 1.0 # not necessary
 PRIMAL_SPP_MULT = 4
 USE_MIS = True
 
+#--------------emitter--------------
+OPTIMIZE_ENVMAP = False
+
 
 #--------------training--------------
 BATCH_SIZE = 6

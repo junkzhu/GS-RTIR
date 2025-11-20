@@ -177,22 +177,24 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             active_e = mi.Mask(active)
             with dr.suspend_grad():
                 ds, _ = scene.sample_emitter_direction(si, sampler.next_2d(active_e), False, active)
-                active_e &= (ds.pdf != 0.0)
-                shadow_ray = si.spawn_ray_to(ds.p)
-                shadow_ray.d = dr.detach(shadow_ray.d)
-                shadow_ray_valid = dr.dot(N, shadow_ray.d) > 0.0
-                occluded = self.shadow_ray_test(scene, sampler, shadow_ray, active_e & shadow_ray_valid)
+            
+            active_e &= (ds.pdf != 0.0)
+                
+            shadow_ray = si.spawn_ray_to(ds.p)
+            shadow_ray.d = dr.detach(shadow_ray.d)
+            shadow_ray_valid = dr.dot(N, shadow_ray.d) > 0.0
+            occluded = self.shadow_ray_test(scene, sampler, shadow_ray, active_e & shadow_ray_valid)
 
-                si_e = dr.zeros(mi.SurfaceInteraction3f)
-                si_e.sh_frame.n = ds.n
-                si_e.initialize_sh_frame()
-                si_e.n = si_e.sh_frame.n
-                si_e.wi = -shadow_ray.d
-                si_e.wavelengths = ray.wavelengths
-                emitter_val = dr.select(active_e, ds.emitter.eval(si_e, active_e), 0.0)
+            si_e = dr.zeros(mi.SurfaceInteraction3f)
+            si_e.sh_frame.n = ds.n
+            si_e.initialize_sh_frame()
+            si_e.n = si_e.sh_frame.n
+            si_e.wi = -shadow_ray.d
+            si_e.wavelengths = ray.wavelengths
+            emitter_val = dr.select(active_e, ds.emitter.eval(si_e, active_e), 0.0)
 
-                emitter_val = dr.select(ds.pdf > 0, emitter_val / ds.pdf, 0.0)
-                visibility = dr.select(~occluded, 1.0, 0.0)
+            emitter_val = dr.select(ds.pdf > 0, emitter_val / ds.pdf, 0.0)
+            visibility = dr.select(~occluded, 1.0, 0.0)
             
             #-----------eval bsdf-----------
             Ldirection = shadow_ray.d #light direction (incoming)
