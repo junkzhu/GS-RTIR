@@ -16,8 +16,10 @@ RESET_ATTRIBUTE = False
 #INTEGRATOR = 'volprim_rf_basic'
 INTEGRATOR = 'gsprim_prb'
 MAX_BOUNCE_NUM = 4
+
 SPP = 8
 SPP_PT_RATE = 1.0 # not necessary
+
 PRIMAL_SPP_MULT = 4
 USE_MIS = True
 

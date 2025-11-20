@@ -110,7 +110,7 @@ if __name__ == "__main__":
 
             #loss follow GS-IR
             view_tv_loss = TV(dr.concat([albedo_img, roughness_img, metallic_img], axis=2), ref_img) / dataset.batch_size
-            lamb_loss = dr.mean(1.0-roughness_img) + dr.mean(metallic_img)
+            lamb_loss = dr.mean(1.0-roughness_img) / dataset.batch_size
 
             #convert depth to fake_normal
             fake_normal_img = convert_depth_to_normal(depth_img, sensor)
