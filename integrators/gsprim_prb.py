@@ -195,9 +195,8 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         D_cur = D_cur_raw
 
         si_cur = self.SurfaceInteraction3f(ray_cur, D_cur, N_cur, si_valid)
-        active &= si_cur.is_valid()
         
-        valid_ray = active # output mask
+        valid_ray |= si_cur.is_valid() # output mask
         
         #aov & state_outs
         aov_A[mask_pt] += dr.select(active, A_cur, 0.0)
