@@ -59,4 +59,7 @@ os.makedirs(OUTPUT_PLY_DIR, exist_ok=True)
 OUTPUT_RENDER_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './renders'))
 os.makedirs(OUTPUT_RENDER_DIR, exist_ok=True)
 
+OUTPUT_ENVMAP_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './envmap'))
+os.makedirs(OUTPUT_ENVMAP_DIR, exist_ok=True)
+
 del __SCRIPT_DIR
