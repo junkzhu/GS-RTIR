@@ -334,3 +334,5 @@ class MyEnvironmentMapEmitter(mi.Emitter):
                   f'  bsphere = {indent(str(self.m_bsphere))},\n'
                   f']')
         return oss.getvalue()
+
+mi.register_emitter('myenvmap', lambda props:  MyEnvironmentMapEmitter(props))
