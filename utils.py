@@ -110,7 +110,7 @@ def plot_loss(data, label, output_file):
     plt.title(label + ' plot')
     plt.savefig(output_file)
 
-def get_lgtSGs(params):
+def get_lgtSGs(params, num_sgs):
     envmap_template = """{% for i in range(num_sgs) %}
 lobe_{{ i }} = params['envmap.lgtSGslobe_{{ i }}'].numpy()
 lambda_{{ i }} = params['envmap.lgtSGslambda_{{ i }}'].numpy()
@@ -119,7 +119,7 @@ mu_{{ i }} = params['envmap.lgtSGsmu_{{ i }}'].numpy()
 lgtSGs = [ {% for i in range(num_sgs) %} lobe_{{ i }}, lambda_{{ i }}, mu_{{ i }} {% if not loop.last %}, {% endif %} {% endfor %} ]
 """
     envmap_template = Template(envmap_template)
-    envmap_data = envmap_template.render(num_sgs=8)
+    envmap_data = envmap_template.render(num_sgs=num_sgs)
     # Execute into an isolated local dict and include params in that dict
     envmap_locals = {'params': params}
     exec(envmap_data, globals(), envmap_locals)
@@ -127,8 +127,8 @@ lgtSGs = [ {% for i in range(num_sgs) %} lobe_{{ i }}, lambda_{{ i }}, mu_{{ i }
     # extract lgtSGs and params (if modified by the exec code)
     return np.array(np.concatenate([np.ravel(x).astype(np.float32) for x in envmap_locals.get('lgtSGs')]), dtype=np.float32).reshape(-1, 7)
 
-def render_envmap_bitmap(params):
-    lgtSGs = get_lgtSGs(params)
+def render_envmap_bitmap(params, num_sgs):
+    lgtSGs = get_lgtSGs(params, num_sgs)
     lgtSGs_torch = torch.tensor(lgtSGs, dtype=torch.float32)
     envmap = SG2Envmap(lgtSGs_torch, 256, 512).detach().cpu().numpy()
     return mi.Bitmap(envmap)

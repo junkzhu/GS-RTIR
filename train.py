@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # original envmap
     envmap = mi.Bitmap(ENVMAP_PATH)
     envmap = np.array(envmap)
-    mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'ref' + ('.exr')), envmap)
+    mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'ref' + ('.png')), envmap)
 
 
     #---------------------------------- config ----------------------------------
@@ -38,7 +38,7 @@ if __name__ == "__main__":
             'max_depth': MAX_BOUNCE_NUM,
             'pt_rate': SPP_PT_RATE,
             'gaussian_max_depth': 128,
-            'hide_emitters': True,
+            'hide_emitters': HIDE_EMITTER,
             'use_mis': USE_MIS
         },
         'shape': {
@@ -57,6 +57,12 @@ if __name__ == "__main__":
     }
 
     if OPTIMIZE_ENVMAP:
+        # register SG envmap
+        SGModel(
+            num_sgs = NUM_SGS,
+            #sg_init = np.load("output/final_optimized_sgs.npy")
+        )
+        
         scene_config['envmap'] = {
             'type': 'vMF',
             'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
@@ -64,6 +70,7 @@ if __name__ == "__main__":
                         mi.ScalarTransform4f.rotate([1, 0, 0], 90)
         }
         OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
+    
     else:
         scene_config['emitter'] = {
             'type': 'envmap',
@@ -190,7 +197,7 @@ if __name__ == "__main__":
 
         # save envmap
         if OPTIMIZE_ENVMAP:
-            envmap_img = render_envmap_bitmap(params)
+            envmap_img = render_envmap_bitmap(params=params, num_sgs=NUM_SGS)
             mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
 
 

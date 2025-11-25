@@ -1,1 +1,1 @@
-from . import vMF
+from . import myenvmap

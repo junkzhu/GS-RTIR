@@ -22,10 +22,11 @@ SPP_PT_RATE = 1.0 # not necessary
 
 PRIMAL_SPP_MULT = 4
 USE_MIS = True
+HIDE_EMITTER = True
 
 #--------------emitter--------------
-OPTIMIZE_ENVMAP = False
-
+OPTIMIZE_ENVMAP = True
+NUM_SGS = 16
 
 #--------------training--------------
 BATCH_SIZE = 6

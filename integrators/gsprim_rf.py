@@ -220,10 +220,13 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                     bs_dir, bs_pdf = self.sample_bsdf(sampler, si, R, M, Vdirection)
                     active_bsdf = mi.Mask(active) & (bs_pdf > 0.0)
 
-                    ds = dr.zeros(mi.DirectionSample3f)
+                    # fake si_next
+                    si_next = dr.zeros(mi.SurfaceInteraction3f)
+                    si_next.p = si.p + bs_dir * 0.1
+
+                    ds = mi.DirectionSample3f(scene, si=si_next, ref=si)
                     ds.d = bs_dir
                     ds.dist = dr.inf
-                    ds.emitter = scene.emitters()[0]
 
                     emitter_pdf = scene.pdf_emitter_direction(si, ds, active_bsdf)
                 
