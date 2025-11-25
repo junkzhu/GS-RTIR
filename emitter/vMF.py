@@ -79,5 +79,3 @@ class VonMisesFisherEmitter(SGEmitter):
                 frame.to_local(d), kappa) * self.weight_warp.eval_pmf_normalized(i, active=active)
             i += 1
         return pdf_sum & active
-
-mi.register_emitter('vMF', lambda props: VonMisesFisherEmitter(props))

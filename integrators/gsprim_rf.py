@@ -250,13 +250,13 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         if not primal:
             with dr.resume_grad():
                 
-                dr.backward_from(result)
+                dr.backward_from(δL * result)
 
-                δA_in = δL * dr.grad(A_raw) + δA # ∂RGB/∂A
-                δR_in = δL * dr.grad(R_raw) + δR
-                δM_in = δL * dr.grad(M_raw) + δM
-                δD_in = δL * dr.grad(D_raw) + δD
-                δN_in = δL * dr.grad(N_raw) + δN
+                δA_in = dr.grad(A_raw) + δA # ∂RGB/∂A
+                δR_in = dr.grad(R_raw) + δR
+                δM_in = dr.grad(M_raw) + δM
+                δD_in = dr.grad(D_raw) + δD
+                δN_in = dr.grad(N_raw) + δN
     
             # grad backward propagation
             self.ray_marching_loop(scene, sampler, False, ray, δA_in, δR_in, δM_in, δD_in, δN_in, state_raw, active)

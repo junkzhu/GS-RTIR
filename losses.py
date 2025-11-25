@@ -25,6 +25,9 @@ def lpsnr(reference, image):
     reference = np.asarray(reference, dtype=np.float32)
     image = np.asarray(image, dtype=np.float32)
 
+    reference = np.clip(reference, 0.0, None)
+    image = np.clip(image, 0.0, None)
+
     reference = reference**(1/2.2)
     image = image**(1/2.2)
 
