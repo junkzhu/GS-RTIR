@@ -11,3 +11,4 @@ outputs
 *.ply
 
 emitter/output
+emitter/SGEmitter.py
