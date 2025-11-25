@@ -30,7 +30,7 @@ class SGEmitter(MyEnvironmentMapEmitter):
         {% else %}
         self.lobe_{{ i }} = mi.Vector3f(fib_arr[{{ i }}])
         self.lambda_{{ i }} = mi.Float(5.0)
-        self.mu_{{ i }} = mi.Vector3f([1.0, 1.0, 1.0])
+        self.mu_{{ i }} = mi.Vector3f([0.5, 0.5, 0.5])
         {% endif %}
         {% endfor %}
 

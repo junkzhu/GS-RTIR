@@ -26,6 +26,8 @@ HIDE_EMITTER = True
 
 #--------------emitter--------------
 OPTIMIZE_ENVMAP = True
+
+SPHERICAL_GAUSSIAN = True
 NUM_SGS = 16
 
 #--------------training--------------

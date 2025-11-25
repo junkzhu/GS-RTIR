@@ -57,20 +57,31 @@ if __name__ == "__main__":
     }
 
     if OPTIMIZE_ENVMAP:
-        # register SG envmap
-        SGModel(
-            num_sgs = NUM_SGS,
-            #sg_init = np.load("output/final_optimized_sgs.npy")
-        )
+        if SPHERICAL_GAUSSIAN:
+            # register SG envmap
+            SGModel(
+                num_sgs = NUM_SGS,
+                #sg_init = np.load("output/final_optimized_sgs.npy")
+            )
+            
+            scene_config['envmap'] = {
+                'type': 'vMF',
+                'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
+                'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
+                            mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+            }
+            OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
+            OPTIMIZE_PARAMS += ['envmap.position'] + ['envmap.weight'] + ['envmap.std']
         
-        scene_config['envmap'] = {
-            'type': 'vMF',
-            'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
-            'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
-                        mi.ScalarTransform4f.rotate([1, 0, 0], 90)
-        }
-        OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
-    
+        else:
+            scene_config['envmap'] = {
+                'type': 'envmap',
+                'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/init_1280_640.exr',
+                'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
+                            mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+            }
+            OPTIMIZE_PARAMS += ['envmap.data']
+
     else:
         scene_config['emitter'] = {
             'type': 'envmap',
@@ -197,9 +208,14 @@ if __name__ == "__main__":
 
         # save envmap
         if OPTIMIZE_ENVMAP:
-            envmap_img = render_envmap_bitmap(params=params, num_sgs=NUM_SGS)
-            mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
+            if SPHERICAL_GAUSSIAN:
+                envmap_img = render_envmap_bitmap(params=params, num_sgs=NUM_SGS)
+                mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
 
+            else:
+                envmap_data = params['envmap.data']
+                envmap_img = mi.Bitmap(envmap_data)
+                mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
 
         if (i+1) in dataset.render_upsample_iter:
             plot_loss(loss_list, label='Total Loss', output_file=join(OUTPUT_DIR, 'total_loss.png'))
