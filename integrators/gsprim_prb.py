@@ -160,9 +160,9 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         si_prev = dr.zeros(mi.SurfaceInteraction3f)
 
         A_prev = mi.Spectrum(0.0)
-        R_prev = mi.Float(0.0)
-        M_prev = mi.Float(0.0)
-        D_prev = mi.Float(0.0)
+        R_prev = mi.Spectrum(0.0)
+        M_prev = mi.Spectrum(0.0)
+        D_prev = mi.Spectrum(0.0)
         N_prev = mi.Spectrum(0.0)
 
         # hybrid trick (just for render)
@@ -181,9 +181,9 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         
         state_cur = {
             'albedo': dr.select(active, A_cur_raw, 0.0),
-            'roughness': dr.select(active, mi.Spectrum(R_cur_raw), 0.0),
-            'metallic': dr.select(active, mi.Spectrum(M_cur_raw), 0.0),
-            'depth': dr.select(active, mi.Spectrum(D_cur_raw), 0.0),
+            'roughness': dr.select(active, R_cur_raw, 0.0),
+            'metallic': dr.select(active, M_cur_raw, 0.0),
+            'depth': dr.select(active, D_cur_raw, 0.0),
             'normal': dr.select(active, N_cur_raw, 0.0),
             'weight_acc': dr.select(active, weight_acc, 0.0)
         }
@@ -201,8 +201,8 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         
         #aov & state_outs
         aov_A[mask_pt] += dr.select(active, A_cur, 0.0)
-        aov_R[mask_pt] += dr.select(active, mi.Spectrum(R_cur), 0.0)
-        aov_M[mask_pt] += dr.select(active, mi.Spectrum(M_cur), 0.0)
+        aov_R[mask_pt] += dr.select(active, R_cur, 0.0)
+        aov_M[mask_pt] += dr.select(active, M_cur, 0.0)
         aov_N[mask_pt] += dr.select(active, N_cur, 0.0)
         aov_D[mask_pt] += dr.select(active, D_cur, 0.0)
 
@@ -282,9 +282,9 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             
             state_next = {
                 'albedo': dr.select(active, A_next_raw, 0.0),
-                'roughness': dr.select(active, mi.Spectrum(R_next_raw), 0.0),
-                'metallic': dr.select(active, mi.Spectrum(M_next_raw), 0.0),
-                'depth': dr.select(active, mi.Spectrum(D_next_raw), 0.0),
+                'roughness': dr.select(active, R_next_raw, 0.0),
+                'metallic': dr.select(active, M_next_raw, 0.0),
+                'depth': dr.select(active, D_next_raw, 0.0),
                 'normal': dr.select(active, N_next_raw, 0.0),
                 'weight_acc': dr.select(active, weight_acc_next, 0.0)
             }
@@ -359,12 +359,17 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     dr.backward_from(δL * Lo)
 
                     δA_cur, δR_cur, δM_cur, δD_cur, δN_cur = map(dr.grad, (A_cur, R_cur, M_cur, D_cur, N_cur))
+                    
+                # Small trick: convert spectrum gradient to float, then multiply by δL
+                δR_cur = δL * dr.sum(δR_cur/δL)
+                δM_cur = δL * dr.sum(δM_cur/δL)
+                δD_cur = δL * dr.sum(δD_cur/δL)
 
-                δA_in = dr.select(first_vertex, δA + δA_cur, δA_cur) # ∂loss/∂RGB * ∂RGB/∂A + ∂loss/∂A = ∂loss/∂A
-                δR_in = dr.select(first_vertex, δR + δR_cur, δR_cur)
-                δM_in = dr.select(first_vertex, δM + δM_cur, δM_cur)
-                δD_in = dr.select(first_vertex, δD + δD_cur, δD_cur)
-                δN_in = dr.select(first_vertex, δN + δN_cur, δN_cur)
+                δA_in = dr.select(first_vertex, δA_cur + δA, δA_cur) # ∂loss/∂RGB * ∂RGB/∂A + ∂loss/∂A = ∂loss/∂A
+                δR_in = dr.select(first_vertex, δR_cur + δR, δR_cur)
+                δM_in = dr.select(first_vertex, δM_cur + δM, δM_cur)
+                δD_in = dr.select(first_vertex, δD_cur + δD, δD_cur)
+                δN_in = dr.select(first_vertex, δN_cur + δN, δN_cur)
 
                 self.ray_marching_loop(scene, sampler_clone, False, ray_cur, δA_in, δR_in, δM_in, δD_in, δN_in, state_cur, active_prev)
 

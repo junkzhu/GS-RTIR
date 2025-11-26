@@ -29,6 +29,9 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
     def SurfaceInteraction3f(self, ray, D, N, valid = True, offset = 0.0):
         #create a new si as gaussian intersection
+        if isinstance(D, mi.Spectrum):
+            D = D[0]
+        
         si = dr.zeros(mi.SurfaceInteraction3f)
         si.sh_frame = mi.Frame3f(N)
 
@@ -388,9 +391,9 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         ray = mi.Ray3f(dr.detach(ray)) #clone a new ray
 
         A = mi.Spectrum(0.0 if primal else state_in['albedo'])
-        R = mi.Float(0.0 if primal else state_in['roughness'][0])
-        M = mi.Float(0.0 if primal else state_in['metallic'][0])
-        D = mi.Float(0.0 if primal else state_in['depth'][0])
+        R = mi.Spectrum(0.0 if primal else state_in['roughness'])
+        M = mi.Spectrum(0.0 if primal else state_in['metallic'])
+        D = mi.Spectrum(0.0 if primal else state_in['depth'])
         N = mi.Spectrum(0.0 if primal else state_in['normal'])
         weight_acc = mi.Float(0.0 if primal else state_in['weight_acc'])
 
@@ -413,8 +416,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             normal = mi.Spectrum(0.0)
 
             albedo = mi.Spectrum(0.0)
-            roughness = mi.Float(0.0)
-            metallic = mi.Float(0.0)
+            roughness = mi.Spectrum(0.0)
+            metallic = mi.Spectrum(0.0)
             
             weight = mi.Float(0.0)
             with dr.resume_grad(when=not primal):
@@ -498,7 +501,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         rand = sampler.next_1d()
         active = (rand < (1-T))
 
-        return A, R, M, D, N, active , weight_acc
+        return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, active , weight_acc
 
     #-------------------- BSDF --------------------
     def fresnel_schlick(self, F0, cosTheta):
@@ -584,6 +587,9 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         bsdf_pdf = specular_prob * pdf_spec + diffuse_prob * pdf_diff
 
+        if isinstance(bsdf_pdf, mi.Spectrum):
+            bsdf_pdf = bsdf_pdf[0]
+
         return bsdf_val, dr.detach(bsdf_pdf)
     
     def sample_bsdf(self, sampler, si, roughness, metallic, V_world):
@@ -593,6 +599,12 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         Output: L_world (sampled direction in world space), pdf
         """
         #TODO: 当法线未收敛时，存在V和N反向的可能性，会出现预期之外的错误。（复现方法 GS法线属性初始化为(0,0,-1)）
+
+        if isinstance(roughness, mi.Spectrum):
+            roughness = roughness[0]
+
+        if isinstance(metallic, mi.Spectrum):
+            metallic = metallic[0]
 
         # Local coordinates
         V = dr.normalize(si.to_local(V_world))

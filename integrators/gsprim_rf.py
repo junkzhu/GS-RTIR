@@ -151,9 +151,9 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
         state_raw = {
             'albedo': dr.select(active, A_raw, 0.0),
-            'roughness': dr.select(active, mi.Spectrum(R_raw), 0.0),
-            'metallic': dr.select(active, mi.Spectrum(M_raw), 0.0),
-            'depth': dr.select(active, mi.Spectrum(D_raw), 0.0),
+            'roughness': dr.select(active, R_raw, 0.0),
+            'metallic': dr.select(active, M_raw, 0.0),
+            'depth': dr.select(active, D_raw, 0.0),
             'normal': dr.select(active, N_raw, 0.0),
             'weight_acc': dr.select(active, weight_acc, 0.0)
         }
@@ -255,19 +255,26 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 
                 dr.backward_from(δL * result)
 
-                δA_in = dr.grad(A_raw) + δA # ∂RGB/∂A
-                δR_in = dr.grad(R_raw) + δR
-                δM_in = dr.grad(M_raw) + δM
-                δD_in = dr.grad(D_raw) + δD
-                δN_in = dr.grad(N_raw) + δN
+                δA_cur, δR_cur, δM_cur, δD_cur, δN_cur = map(dr.grad, (A_raw, R_raw, M_raw, D_raw, N_raw))                
+
+            # Small trick: convert spectrum gradient to float, then multiply by δL
+            δR_cur = δL * dr.sum(δR_cur/δL)
+            δM_cur = δL * dr.sum(δM_cur/δL)
+            δD_cur = δL * dr.sum(δD_cur/δL)
+
+            δA_in = δA_cur + δA
+            δR_in = δR_cur + δR 
+            δD_in = δD_cur + δD
+            δM_in = δM_cur + δM
+            δN_in = δN_cur + δN
     
             # grad backward propagation
             self.ray_marching_loop(scene, sampler, False, ray, δA_in, δR_in, δM_in, δD_in, δN_in, state_raw, active)
 
         #aov & state_outs
         aov_A[mask_pt] += dr.select(active, A, 0.0)
-        aov_R[mask_pt] += dr.select(active, mi.Spectrum(R), 0.0)
-        aov_M[mask_pt] += dr.select(active, mi.Spectrum(M), 0.0)
+        aov_R[mask_pt] += dr.select(active, R, 0.0)
+        aov_M[mask_pt] += dr.select(active, M, 0.0)
         aov_N[mask_pt] += dr.select(active, N, 0.0)
         aov_D[mask_pt] += dr.select(active, D, 0.0)
 
