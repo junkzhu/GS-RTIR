@@ -6,6 +6,8 @@ from os.path import join
 import mitsuba as mi
 mi.set_variant('cuda_ad_rgb')
 
+from scipy.spatial import cKDTree
+
 from constants import *
 
 from utils import *
@@ -20,6 +22,10 @@ if __name__ == "__main__":
 
     gaussians = GaussianModel()
     gaussians.restore_from_ply(PLY_PATH, RESET_ATTRIBUTE) #TODO:补充checkpoint读取
+
+    # cKDTree: find the nearest k gaussians
+    KD_Tree = cKDTree(gaussians._xyz)
+    _, kdtree_idx = KD_Tree.query(gaussians._xyz, k=32)
 
     ellipsoidsfactory = EllipsoidsFactory()
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
@@ -127,7 +133,7 @@ if __name__ == "__main__":
             roughness_priors_img = dataset.roughness_priors_images[idx][sensor.film().crop_size()[0]]
             normal_priors_img = dataset.normal_priors_images[idx][sensor.film().crop_size()[0]]
 
-            #aovs
+            # aovs
             albedo_img = aovs['albedo'][:, :, :3]
             roughness_img = aovs['roughness'][:, :, :1]
             metallic_img = aovs['metallic'][:, :, :1]
@@ -139,29 +145,30 @@ if __name__ == "__main__":
 
             view_loss = l1(img, ref_img) / dataset.batch_size
 
-            #priors loss
+            # priors loss follow GS-ID
             albedo_priors_loss = l2(albedo_img, albedo_priors_img) / dataset.batch_size
             roughness_priors_loss = l2(roughness_img, roughness_priors_img) / dataset.batch_size
             normal_priors_loss = l2(normal_img, normal_priors_img) / dataset.batch_size
-            priors_loss = albedo_priors_loss + roughness_priors_loss + normal_priors_loss
+            priors_loss = 0.5 * albedo_priors_loss + roughness_priors_loss + normal_priors_loss
 
-            #loss follow GS-IR
-            view_tv_loss = TV(dr.concat([albedo_img, roughness_img, metallic_img], axis=2), ref_img) / dataset.batch_size
+            # loss follow GS-IR
+            rgb_tv_loss = TV(ref_img, img) / dataset.batch_size
+            material_tv_loss = TV(ref_img, dr.concat([albedo_img, roughness_img, metallic_img], axis=2)) / dataset.batch_size
+            tv_loss = rgb_tv_loss + material_tv_loss
+            
             lamb_loss = dr.mean(1.0-roughness_img) / dataset.batch_size
 
-            #convert depth to fake_normal
+            # convert depth to fake_normal
             fake_normal_img = convert_depth_to_normal(depth_img, sensor)
             normal_loss = lnormal_sqr(normal_img, fake_normal_img, normal_mask_flat) / dataset.batch_size
-            
-            #tv loss
-            albedo_tv_loss = TV(albedo_priors_img, albedo_img) / dataset.batch_size
-            roughness_tv_loss = TV(roughness_priors_img, roughness_img) / dataset.batch_size
-            normal_tv_loss = TV(normal_priors_img, normal_img) / dataset.batch_size
-            tv_loss = view_tv_loss + albedo_tv_loss + roughness_tv_loss + normal_tv_loss
-  
-            #total loss
-            total_loss = view_loss + 0.1 * normal_loss + 0.05 * priors_loss + 0.01 * tv_loss + 0.001 * lamb_loss
+              
+            # smooth loss
+            albedo_laplacian_loss = ldiscrete_laplacian_reg(opt['shape.albedos'], kdtree_idx) / dataset.batch_size
+            roughness_laplacian_loss = ldiscrete_laplacian_reg(opt['shape.roughnesses'], kdtree_idx) / dataset.batch_size
+            laplacian_loss = albedo_laplacian_loss + roughness_laplacian_loss
 
+            # total loss
+            total_loss = view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + tv_loss + 1e-5 * laplacian_loss + 0.05 * priors_loss
             dr.backward(total_loss)
 
             loss += total_loss
@@ -188,11 +195,11 @@ if __name__ == "__main__":
             roughness_mse += l2(ref_roughness, roughness_img) / dataset.batch_size
             normal_mae += lmae(ref_normal, normal_img, normal_mask.squeeze()) / dataset.batch_size
             
-            loss_list.append(np.asarray(total_loss))
-            normal_MAE_list.append(np.asarray(normal_mae))
-            rgb_PSNR_list.append(np.asarray(rgb_psnr))
-            albedo_PSNR_list.append(np.asarray(albedo_psnr))
-            roughness_MSE_list.append(np.asarray(roughness_mse))
+        loss_list.append(np.asarray(total_loss))
+        normal_MAE_list.append(np.asarray(normal_mae))
+        rgb_PSNR_list.append(np.asarray(rgb_psnr))
+        albedo_PSNR_list.append(np.asarray(albedo_psnr))
+        roughness_MSE_list.append(np.asarray(roughness_mse))
 
         opt.step()
         params.update(opt)
