@@ -132,3 +132,32 @@ def render_envmap_bitmap(params, num_sgs):
     lgtSGs_torch = torch.tensor(lgtSGs, dtype=torch.float32)
     envmap = SG2Envmap(lgtSGs_torch, 256, 512).detach().cpu().numpy()
     return mi.Bitmap(envmap)
+
+def compute_rescale_ratio(gt_albedo_list, albedo_list):
+    
+    gt_albedo_flat_list = []
+    albedo_flat_list = []
+    
+    for gt_albedo, albedo in zip(gt_albedo_list, albedo_list):
+        
+        gt_albedo = torch.from_numpy(np.array(gt_albedo))
+        albedo = torch.from_numpy(np.array(albedo))
+
+        gt_albedo_flat = gt_albedo.reshape(-1, 3)
+        albedo_flat = albedo.reshape(-1, 3)
+    
+        mask = ~(albedo_flat == 0).all(dim=1)
+
+        gt_albedo_flat = gt_albedo_flat[mask]
+        albedo_flat = albedo_flat[mask]
+
+        gt_albedo_flat_list.append(gt_albedo_flat)
+        albedo_flat_list.append(albedo_flat)
+
+    gt_all = torch.cat(gt_albedo_flat_list, dim=0)
+    albedo_all = torch.cat(albedo_flat_list, dim=0)
+
+    single_channel_ratio = (gt_all / albedo_all.clamp(min=1e-6))[..., 0].median()
+    three_channel_ratio, _ = (gt_all / albedo_all.clamp(min=1e-6)).median(dim=0)
+
+    return mi.TensorXf(single_channel_ratio), mi.TensorXf(three_channel_ratio)

@@ -55,6 +55,8 @@ if __name__ == "__main__":
         }
     })
 
+    albedo_list, ref_albedo_list = [], []
+
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Rendering views")
 
     for idx, sensor in pbar:
@@ -82,7 +84,18 @@ if __name__ == "__main__":
         normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img+1)/2, 0))), dataset.target_res) 
 
         mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_rgb' + ('.png')), rgb_bmp)
-        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)
+        #mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)
         mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_roughness' + ('.png')), roughness_bmp)
         #mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_metallic' + ('.png')), metallic_bmp)
         mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_normal' + ('.png')), normal_bmp)
+
+        albedo_list.append(albedo_bmp)
+        ref_albedo_list.append(dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]])
+
+    single_channel_ratio, three_channel_ratio = compute_rescale_ratio(ref_albedo_list, albedo_list)
+    
+    for idx, albedo_img in enumerate(albedo_list):
+        albedo_img = three_channel_ratio * albedo_img
+        albedo_bmp = mi.Bitmap(albedo_img)
+
+        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)      
