@@ -94,6 +94,8 @@ if __name__ == "__main__":
 
     single_channel_ratio, three_channel_ratio = compute_rescale_ratio(ref_albedo_list, albedo_list)
     
+    print("albedo_scale:", three_channel_ratio)
+
     for idx, albedo_img in enumerate(albedo_list):
         albedo_img = three_channel_ratio * albedo_img
         albedo_bmp = mi.Bitmap(albedo_img)
