@@ -1,3 +1,6 @@
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import torch
 import tqdm
 import numpy as np
@@ -50,7 +53,7 @@ if __name__ == "__main__":
     
     #clear opacity
     n_ellipsoids = params['shape.opacities'].shape[0]
-    #params['shape.opacities'] = dr.full(mi.Float, 0.01, n_ellipsoids)
+    params['shape.opacities'] = dr.full(mi.Float, 1.0, n_ellipsoids)
 
     #clear sh & normal
     m_sh_coeffs = params['shape.sh_coeffs'].shape[0] // n_ellipsoids
@@ -87,14 +90,13 @@ if __name__ == "__main__":
             seed += 1 + len(dataset.sensors)
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
-            ref_normal = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
             
             normal_priors_img = dataset.normal_priors_images[idx][sensor.film().crop_size()[0]]
 
             #aovs
             depth_img = aovs['depth'][:, :, :1]
             normal_img = aovs['normal'][:, :, :3]
-            normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
+            normal_mask = np.any(normal_priors_img != 0, axis=2, keepdims=True)
             normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
             
             view_loss = l1(ref_img, img) / dataset.batch_size
@@ -104,13 +106,13 @@ if __name__ == "__main__":
 
             # convert depth to fake_normal
             fake_normal_img = convert_depth_to_normal(depth_img, sensor)
-            normal_loss = lnormal_sqr(ref_normal, normal_img, normal_mask_flat) / dataset.batch_size
+            normal_loss = lnormal_sqr(fake_normal_img, normal_img, normal_mask_flat) / dataset.batch_size
             normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
 
             # encourage opacity to be 0 or 1
             opacity_loss = opacity_entropy_loss(params['shape.opacities'])
 
-            total_loss = view_loss + normal_loss #+ normal_priors_loss + normal_loss + normal_tv_loss + 0.1 * opacity_loss
+            total_loss = view_loss + normal_loss + normal_priors_loss + normal_tv_loss #+ 0.1 * opacity_loss
 
             dr.backward(total_loss)
             
@@ -127,7 +129,7 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 
             rgb_psnr += lpsnr(ref_img, img) / dataset.batch_size
-            normal_mae += lmae(ref_normal, normal_img, normal_mask.squeeze()) / dataset.batch_size
+            normal_mae += lmae(normal_priors_img, normal_img, normal_mask.squeeze()) / dataset.batch_size
 
         #grad restraint
         # grad = dr.grad(params['shape.data'])

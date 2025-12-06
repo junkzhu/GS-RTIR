@@ -148,6 +148,50 @@ class GaussianModel:
         self._normal = self._normal / (torch.norm(self._normal, dim=1, keepdim=True) + 1e-8)
         #normal = [x * 2 - 1 for x in normal]
 
+    def restore_from_ckpt(self, path, reset_attribute = False):
+        '''
+        Read checkpoint file from 3dgrt 
+        '''
+        
+        checkpoint = torch.load(path, weights_only=False, map_location="cpu")
+        
+        self._xyz = checkpoint["positions"]
+        self._scaling = checkpoint["scale"]
+        self._rotation = checkpoint["rotation"]
+        self._opacity = checkpoint["density"]
+
+        N = self._xyz.shape[0]
+
+        if "features_albedo" in checkpoint:
+            features_dc = checkpoint["features_albedo"].unsqueeze(1)
+        else:
+            features_dc = torch.zeros((N, 1, 3))
+        
+        if "features_specular" in checkpoint:
+            features_rest = checkpoint["features_specular"].reshape(N, 15, 3)
+            #features_rest = torch.transpose(features_rest, 1, 2)
+        else:
+            features_rest = torch.zeros((N, 15, 3))
+
+        self._features_dc = features_dc
+        self._features_rest = features_rest
+
+        self._normal = torch.from_numpy(np.zeros((N, 3))) 
+        self._albedo = torch.from_numpy(np.ones((N, 3), dtype=np.float32) * 0.5)
+        self._roughness = torch.from_numpy(np.ones((N, 1), dtype=np.float32))
+        self._metallic = torch.from_numpy(np.zeros((N, 1), dtype=np.float32))
+
+        self._opacity = torch.sigmoid(self._opacity)
+        self._opacity = torch.clamp(self._opacity, 1e-8, 1.0 - 1e-8)
+
+        self._scaling = torch.exp(self._scaling)
+        self._scaling = torch.clamp(self._scaling, min=1e-6)
+
+        self._rotation = torch.roll(self._rotation, shifts=-1, dims=1)
+        self._rotation = self._rotation / (torch.norm(self._rotation, dim=1, keepdim=True) + 1e-8)
+
+        self._normal = self._normal / (torch.norm(self._normal, dim=1, keepdim=True) + 1e-8)
+
     def restore_from_params(self, params):
         n = self._xyz.shape[0]
 
@@ -261,3 +305,6 @@ class GaussianModel:
         ply_el = PlyElement.describe(vertices, 'vertex')
         PlyData([ply_el], text=False).write(path)
 
+    def rescale_albedo(self, scale):
+        scale = torch.from_numpy(np.array(scale))
+        self._albedo = self._albedo * scale

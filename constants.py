@@ -1,14 +1,35 @@
 """This file stores the global constants used throughout the code base. Most importantly,
 it specifies output paths and scene directory."""
-
+import argparse
 import os
-#--------------dataset--------------
-DATASET_PATH = 'D:/ZJK/hotdog_aov'
 
-PLY_PATH = 'D:/ZJK/GS-RTIR/outputs/ply/refined.ply'
+def get_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--dataset_type", help="Synthetic4Relight")
+    parser.add_argument("--dataset_name", help="chair")
+    parser.add_argument("--dataset_path", help="E:/dataset/Synthetic4Relight/chair")
+
+    parser.add_argument("--ply_path", help="E:/dataset/Synthetic4Relight/chair.ply")
+    parser.add_argument("--refine_path", help="E:/dataset/Synthetic4Relight/chair_refined.ply")
+
+    #--------------render & metrics--------------
+    parser.add_argument("--render_spp", type=int, default=128, help="number of samples per pixel for rendering")
+
+    args = parser.parse_args()
+    return args
+    
+args = get_args()
+
+#--------------dataset--------------
+DATASET_TYPE = args.dataset_type
+DATASET_NAME = args.dataset_name
+DATASET_PATH = args.dataset_path
+
+PLY_PATH = args.ply_path
 ENVMAP_PATH = 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr'
 
-REFINE_PATH = 'D:/ZJK/GS-RTIR/outputs/ply/point_refined.ply'
+REFINE_PATH = args.refine_path
 
 RESET_ATTRIBUTE = False
 
@@ -25,7 +46,7 @@ USE_MIS = True
 HIDE_EMITTER = True
 
 #--------------emitter--------------
-OPTIMIZE_ENVMAP = True
+OPTIMIZE_ENVMAP = False
 
 SPHERICAL_GAUSSIAN = True
 NUM_SGS = 16
@@ -41,13 +62,16 @@ REFINE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.sh_coe
 REFINE_UPSAMPLE_ITER = [32, 64]
 
 #--------------render & metrics--------------
-RENDER_SPP = 128
+RENDER_SPP = args.render_spp
 RENDER_UPSAMPLE_ITER = []
 
 #--------------folder--------------
 __SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__))
 
-OUTPUT_DIR = os.path.realpath(os.path.join(__SCRIPT_DIR, './outputs'))
+OUTPUT = os.path.realpath(os.path.join(__SCRIPT_DIR, './outputs'))
+os.makedirs(OUTPUT, exist_ok=True)
+
+OUTPUT_DIR = os.path.realpath(os.path.join(OUTPUT, f'./{DATASET_TYPE}_{DATASET_NAME}'))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 OUTPUT_REFINE_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './refine'))

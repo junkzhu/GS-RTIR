@@ -65,7 +65,6 @@ if __name__ == "__main__":
         ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
         ref_albedo = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
         ref_roughness = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]]
-        ref_normal = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
         
         #aovs
         albedo_img = aovs['albedo'][:, :, :3]
@@ -73,7 +72,7 @@ if __name__ == "__main__":
         metallic_img = aovs['metallic'][:, :, :1]
         normal_img = aovs['normal'][:, :, :3]
 
-        normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
+        normal_mask = np.any(normal_img != 0, axis=2, keepdims=True)
         normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
 
         rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
@@ -100,4 +99,10 @@ if __name__ == "__main__":
         albedo_img = three_channel_ratio * albedo_img
         albedo_bmp = mi.Bitmap(albedo_img)
 
-        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)      
+        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)
+
+    #---------------rescale albedo-----------------
+    gaussians.rescale_albedo(three_channel_ratio)
+
+    save_path = PLY_PATH.replace('.ply', '_rescaled.ply')
+    gaussians.save_ply(save_path)

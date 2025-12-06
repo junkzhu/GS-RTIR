@@ -21,7 +21,12 @@ if __name__ == "__main__":
     dataset = Dataset(DATASET_PATH)
 
     gaussians = GaussianModel()
-    gaussians.restore_from_ply(PLY_PATH, RESET_ATTRIBUTE) #TODO:补充checkpoint读取
+    if PLY_PATH.endswith(".ply"):
+        gaussians.restore_from_ply(PLY_PATH, RESET_ATTRIBUTE)
+    elif PLY_PATH.endswith(".pt"):
+        gaussians.restore_from_ckpt(PLY_PATH)
+    else:
+        raise ValueError(f"Unsupported file type: {PLY_PATH}")
 
     # cKDTree: find the nearest k gaussians
     KD_Tree = cKDTree(gaussians._xyz)
@@ -125,9 +130,6 @@ if __name__ == "__main__":
             seed += 1 + len(dataset.sensors)
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
-            ref_albedo = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
-            ref_roughness = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]]
-            ref_normal = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
             
             albedo_priors_img = dataset.albedo_priors_images[idx][sensor.film().crop_size()[0]]
             roughness_priors_img = dataset.roughness_priors_images[idx][sensor.film().crop_size()[0]]
@@ -140,7 +142,7 @@ if __name__ == "__main__":
             depth_img = aovs['depth'][:, :, :1]
             normal_img = aovs['normal'][:, :, :3]
             
-            normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
+            normal_mask = np.any(normal_img != 0, axis=2, keepdims=True)
             normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
 
             view_loss = l1(img, ref_img) / dataset.batch_size
@@ -168,7 +170,7 @@ if __name__ == "__main__":
             laplacian_loss = albedo_laplacian_loss + roughness_laplacian_loss
 
             # total loss
-            total_loss = view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + tv_loss + 1e-5 * laplacian_loss + 0.05 * priors_loss
+            total_loss = view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 1e-5 * laplacian_loss + 0.05 * priors_loss
             dr.backward(total_loss)
 
             loss += total_loss
@@ -191,15 +193,23 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 
             rgb_psnr += lpsnr(ref_img, img) / dataset.batch_size
-            albedo_psnr += lpsnr(ref_albedo, albedo_img) / dataset.batch_size
-            roughness_mse += l2(ref_roughness, roughness_img) / dataset.batch_size
-            normal_mae += lmae(ref_normal, normal_img, normal_mask.squeeze()) / dataset.batch_size
+
+            if DATASET_TYPE == "TensoIR":
+                ref_albedo = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
+                ref_roughness = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]]
+                ref_normal = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
+
+                albedo_psnr += lpsnr(ref_albedo, albedo_img) / dataset.batch_size
+                roughness_mse += l2(ref_roughness, roughness_img) / dataset.batch_size
+                normal_mae += lmae(ref_normal, normal_img, normal_mask.squeeze()) / dataset.batch_size
             
         loss_list.append(np.asarray(total_loss))
-        normal_MAE_list.append(np.asarray(normal_mae))
         rgb_PSNR_list.append(np.asarray(rgb_psnr))
-        albedo_PSNR_list.append(np.asarray(albedo_psnr))
-        roughness_MSE_list.append(np.asarray(roughness_mse))
+
+        if DATASET_TYPE == "TensoIR":
+            normal_MAE_list.append(np.asarray(normal_mae))
+            albedo_PSNR_list.append(np.asarray(albedo_psnr))
+            roughness_MSE_list.append(np.asarray(roughness_mse))
 
         opt.step()
         params.update(opt)
@@ -210,7 +220,10 @@ if __name__ == "__main__":
         loss_str = f'Loss: {loss_np[0]:.4f}'
         pbar.set_description(loss_str)
 
-        pbar.set_postfix({'rgb': rgb_psnr, 'albedo': albedo_psnr, 'roughness': roughness_mse, 'normal': normal_mae})
+        if DATASET_TYPE == "TensoIR":
+            pbar.set_postfix({'rgb': rgb_psnr, 'albedo': albedo_psnr, 'roughness': roughness_mse, 'normal': normal_mae})
+        else:
+            pbar.set_postfix({'rgb': rgb_psnr})
 
 
         # save envmap

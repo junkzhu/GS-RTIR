@@ -29,20 +29,25 @@ class Dataset:
 
         self.target_res = [800,800]
 
-        if os.path.exists(os.path.join(source_path, "sparse")):
+        if DATASET_TYPE == 'COLMAP':
             assert(1==2) #TODO COLMAP
-        elif os.path.exists(os.path.join(source_path, f"transforms_{dataset_type}.json")):
-            self.sensors, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["Blender"](
+        elif DATASET_TYPE == 'TensoIR':
+            self.sensors, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["TensoIR"](
                 source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type
             )
-
-            self.init_res = mi.ScalarPoint2i(np.array(self.target_res)//2**len(self.render_upsample_iter))
-
-            for sensor in self.sensors:
-                set_sensor_res(sensor, self.init_res)
-
+        elif DATASET_TYPE == 'Synthetic4Relight':
+            self.sensors, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["Synthetic4Relight"](
+                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type
+            )
+        elif DATASET_TYPE == 'Stanford_orb':
+            assert(1==2)
         else:
             assert False, "Could not recognize scene type!"
+
+        self.init_res = mi.ScalarPoint2i(np.array(self.target_res)//2**len(self.render_upsample_iter))
+
+        for sensor in self.sensors:
+            set_sensor_res(sensor, self.init_res)
 
     def get_sensor_iterator(self, i):
         n_sensors = len(self.sensors)
