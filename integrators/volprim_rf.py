@@ -136,16 +136,13 @@ class BasicVolumetricPrimitiveRadianceFieldIntegrator(RBIntegrator):
             with dr.resume_grad(when=not primal):
                 emission     = self.eval_sh_emission(si, ray, active)
                 transmission = self.eval_transmission(si, ray, active)
-
-                transmission_det = dr.detach(transmission)
-
-                Le[active] = β * (1.0 - transmission_det) * emission
+                Le[active] = β * (1.0 - transmission) * emission
                 Le[~dr.isfinite(Le)] = 0.0
 
             # ------- Update loop variables based on current interaction -------
 
             L[active] = (L + Le) if primal else (L - Le)
-            β[active] *= transmission_det
+            β[active] *= transmission
 
             # Spawn new ray (don't use si.spawn_ray to avoid self intersections)
             ray.o[active] = si.p + ray.d * 1e-4

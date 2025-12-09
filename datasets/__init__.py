@@ -19,6 +19,9 @@ class Dataset:
         self.render_upsample_iter = list(render_upsampler_iters)
 
         self.sensors = {}
+        self.sensors_normal = {}
+        self.sensors_intrinsic = {}
+
         self.ref_images = {}
         self.ref_albedo_images = {}
         self.ref_normal_images = {}
@@ -32,11 +35,11 @@ class Dataset:
         if DATASET_TYPE == 'COLMAP':
             assert(1==2) #TODO COLMAP
         elif DATASET_TYPE == 'TensoIR':
-            self.sensors, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["TensoIR"](
-                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type
+            self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["TensoIR"](
+                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env='sunset'
             )
         elif DATASET_TYPE == 'Synthetic4Relight':
-            self.sensors, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["Synthetic4Relight"](
+            self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["Synthetic4Relight"](
                 source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type
             )
         elif DATASET_TYPE == 'Stanford_orb':

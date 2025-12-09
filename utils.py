@@ -5,6 +5,8 @@ from jinja2 import Template
 import numpy as np
 import torch
 from emitter.sgenvmap_util import SG2Envmap
+import glob
+import os
 
 def resize_img(img, target_res, smooth=False):
     """Resizes a Mitsuba Bitmap using either a box filter (smooth=False)
@@ -161,3 +163,8 @@ def compute_rescale_ratio(gt_albedo_list, albedo_list):
     three_channel_ratio, _ = (gt_all / albedo_all.clamp(min=1e-6)).median(dim=0)
 
     return mi.TensorXf(single_channel_ratio), mi.TensorXf(three_channel_ratio)
+
+def load_hdr_paths(root_dir):
+    hdr_paths = glob.glob(os.path.join(root_dir, "*.hdr"))
+    hdr_paths.sort()
+    return hdr_paths

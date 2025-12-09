@@ -193,7 +193,7 @@ class GaussianModel:
         self._normal = self._normal / (torch.norm(self._normal, dim=1, keepdim=True) + 1e-8)
 
     def restore_from_params(self, params):
-        n = self._xyz.shape[0]
+        n = params['shape.opacities'].shape[0]
 
         if 'shape.data' in params:
             data = np.array(params['shape.data'])
@@ -220,14 +220,20 @@ class GaussianModel:
         if 'shape.albedos'in params:
             albedos = np.array(params['shape.albedos'])
             self._albedo = albedos.reshape(n, 3)
+        else:
+            self._albedo = torch.from_numpy(np.ones((n, 3), dtype=np.float32) * 0.5)
         
         if 'shape.roughnesses' in params:
             roughnesses = np.array(params['shape.roughnesses'])
             self._roughness = roughnesses.reshape(n, 1)
+        else:
+            self._roughness = torch.from_numpy(np.ones((n, 1), dtype=np.float32))
         
         if 'shape.metallics' in params:
             metallics = np.array(params['shape.metallics'])
             self._metallic = metallics.reshape(n, 1)
+        else:
+            self._metallic = torch.from_numpy(np.zeros((n, 1), dtype=np.float32))
 
     def save_ply(self, path):
         N = self._xyz.shape[0]

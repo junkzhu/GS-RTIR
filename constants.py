@@ -2,6 +2,8 @@
 it specifies output paths and scene directory."""
 import argparse
 import os
+import time
+timestamp = time.strftime("%d%m_%H%M%S")
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -57,13 +59,17 @@ NITER = 512
 OPTIMIZE_PARAMS = ['shape.normals','shape.albedos','shape.roughnesses']
 TRAIN_UPSAMPLE_ITER = [64, 128, 256]
 
-REFINE_NITER = 128
+REFINE_NITER = 500
+REFINE_SPP = 4
 REFINE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.sh_coeffs']
-REFINE_UPSAMPLE_ITER = [32, 64]
+REFINE_UPSAMPLE_ITER = []
 
 #--------------render & metrics--------------
 RENDER_SPP = args.render_spp
 RENDER_UPSAMPLE_ITER = []
+
+RELIGHT = True
+ENVMAP_ROOT = "D:/dataset/Environment_Maps/high_res_envmaps_1k"
 
 #--------------folder--------------
 __SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__))
@@ -71,7 +77,11 @@ __SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__))
 OUTPUT = os.path.realpath(os.path.join(__SCRIPT_DIR, './outputs'))
 os.makedirs(OUTPUT, exist_ok=True)
 
-OUTPUT_DIR = os.path.realpath(os.path.join(OUTPUT, f'./{DATASET_TYPE}_{DATASET_NAME}'))
+DATASET_TYPE_DIR = os.path.realpath(os.path.join(OUTPUT, f'./{DATASET_TYPE}'))
+os.makedirs(DATASET_TYPE_DIR, exist_ok=True)
+
+#OUTPUT_DIR = os.path.realpath(os.path.join(DATASET_TYPE_DIR, f'./{DATASET_NAME}_{timestamp}'))
+OUTPUT_DIR = os.path.realpath(os.path.join(DATASET_TYPE_DIR, f'./{DATASET_NAME}'))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 OUTPUT_REFINE_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './refine'))
@@ -88,6 +98,9 @@ os.makedirs(OUTPUT_PLY_DIR, exist_ok=True)
 
 OUTPUT_RENDER_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './renders'))
 os.makedirs(OUTPUT_RENDER_DIR, exist_ok=True)
+
+OUTPUT_RELIGHT_DIR = os.path.realpath(os.path.join(OUTPUT_RENDER_DIR, './relight'))
+os.makedirs(OUTPUT_RELIGHT_DIR, exist_ok=True)
 
 OUTPUT_ENVMAP_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './envmap'))
 os.makedirs(OUTPUT_ENVMAP_DIR, exist_ok=True)

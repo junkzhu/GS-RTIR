@@ -10,6 +10,8 @@ from utils import resize_img
 def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
     #-------------------------SENSORS------------------------
     sensors = []
+    sensors_normal = []
+    sensors_intrinsic = []
     sampler = mi.load_dict({'type': 'independent'})
     film = mi.load_dict({
         'type': 'hdrfilm', 
@@ -101,7 +103,17 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         })
         
         sensors.append(sensor)
-    
+        
+        sensor_normal = -c2w[:3, 2]
+        sensors_normal.append(sensor_normal)
+
+        fx = 0.5 * resx / np.tan(0.5 * camera_angle_x)
+        fy = 0.5 * resy / np.tan(0.5 * camera_angle_x)
+        cx = resx / 2.0
+        cy = resy / 2.0
+        intrinsic = np.array([fx, fy, cx, cy], dtype=np.float32)
+        sensors_intrinsic.append(intrinsic)
+
     #-------------------------IMAGES------------------------
     image_paths=[]
     for frame in frames:
@@ -193,7 +205,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         ref_roughness_images.append(d)
 
     if split != 'train':
-        return sensors, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None
+        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None
 
     albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset.png') for path in image_paths]
     albedo_priors_images=[]
@@ -241,11 +253,13 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
             d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         normal_priors_images.append(d)
 
-    return sensors, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images
+    return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images
 
 def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
     #-------------------------SENSORS------------------------
     sensors = []
+    sensors_normal = []
+    sensors_intrinsic = []
     sampler = mi.load_dict({'type': 'independent'})
     film = mi.load_dict({
         'type': 'hdrfilm', 
@@ -273,7 +287,6 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
         print("Warning: camera_angle_x not found in transforms file")
         return []
     
-    focal_length = 0.5 * resx / np.tan(0.5 * camera_angle_x)
     fov = np.degrees(camera_angle_x)
     
     frames = transforms_data.get('frames', [])
@@ -338,6 +351,16 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
         
         sensors.append(sensor)
     
+        sensor_normal = -c2w[:3, 2]
+        sensors_normal.append(sensor_normal)
+
+        fx = 0.5 * resx / np.tan(0.5 * camera_angle_x)
+        fy = 0.5 * resy / np.tan(0.5 * camera_angle_x)
+        cx = resx / 2.0
+        cy = resy / 2.0
+        intrinsic = np.array([fx, fy, cx, cy], dtype=np.float32)
+        sensors_intrinsic.append(intrinsic)
+
     #-------------------------IMAGES------------------------
     image_paths=[]
     for frame in frames:
@@ -424,7 +447,7 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
             ref_roughness_images.append(d)
 
     if split != 'train':
-        return sensors, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None
+        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None
 
     albedo_priors_paths = [path.replace('.png', '_albedo_rgb2x.png') for path in image_paths]
     albedo_priors_images=[]
@@ -472,7 +495,7 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
             d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         normal_priors_images.append(d)
 
-    return sensors, ref_images, ref_albedo_images, None, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images
+    return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images
 
 def read_Stanford_orb(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
     #-------------------------SENSORS------------------------

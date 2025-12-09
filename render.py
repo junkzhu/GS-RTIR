@@ -2,6 +2,7 @@ import torch
 import tqdm
 import numpy as np
 from os.path import join
+from pathlib import Path
 
 import mitsuba as mi
 mi.set_variant('cuda_ad_rgb')
@@ -106,3 +107,24 @@ if __name__ == "__main__":
 
     save_path = PLY_PATH.replace('.ply', '_rescaled.ply')
     gaussians.save_ply(save_path)
+
+    #---------------relight-----------------
+    if RELIGHT:
+        envmaps = load_hdr_paths(ENVMAP_ROOT)
+        params = mi.traverse(scene_dict)
+        
+        for envmap in envmaps:
+            #create folder
+            envmap_name = Path(envmap).stem
+            envmap_dir = os.path.realpath(os.path.join(OUTPUT_RELIGHT_DIR, f'./{envmap_name}'))
+            os.makedirs(envmap_dir, exist_ok=True)
+
+            #change envmap
+            bitmap = mi.TensorXf(mi.Bitmap(envmap))
+            params['EnvironmentMapEmitter.data'] = bitmap
+
+            relight_pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc=f"Relighting {envmap_name}")
+            for idx, sensor in relight_pbar:
+                img, _ = mi.render(scene_dict, params=params, sensor=sensor, spp=RENDER_SPP)
+                rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
+                mi.util.write_bitmap(join(envmap_dir, f'{idx:02d}' + ('.png')), rgb_bmp)
