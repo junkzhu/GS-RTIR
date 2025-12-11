@@ -56,6 +56,37 @@ def readImages(renders_dir):
     
     return renders
 
+def read_RGB_images(renders_dir):
+    renders = {
+        "rgb": []
+    }
+    image_paths = []
+
+    for fname in natsorted(os.listdir(renders_dir)):
+        if not fname.endswith(".png"):
+            continue
+
+        image_paths.append(fname)
+
+    for image_path in image_paths:
+        def srgb_to_linear(img):
+            """Convert sRGB to linear RGB (gamma correction)"""
+            return img ** 2.2
+
+        def read_img(path):
+            img = imageio.imread(path).astype(np.float32) / 255.0
+            if img.shape[-1] == 4:  # RGBA
+                rgb = img[..., :3]
+                alpha = img[..., 3:4]
+                rgb = rgb * alpha
+                img = rgb
+            img = srgb_to_linear(img)
+            return img
+
+        renders["rgb"].append(read_img(os.path.join(renders_dir, image_path)))
+    
+    return renders
+
 def to_torch_image(img):
     if isinstance(img, dr.ArrayBase):
         img = np.array(img)
@@ -68,8 +99,7 @@ def to_torch_image(img):
     img_torch = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).contiguous()
     return img_torch
 
-if __name__ == "__main__":
-    
+def metrics_training_envmap():
     dataset = Dataset(DATASET_PATH, RENDER_UPSAMPLE_ITER, "test")
 
     renders = readImages(OUTPUT_RENDER_DIR)
@@ -139,3 +169,49 @@ if __name__ == "__main__":
     save_path = os.path.join(OUTPUT_RENDER_DIR, "results_metrics.json")
     np.savez(save_path, **metrics)
     print(f"[INFO] Metrics saved to {save_path}")
+
+def metrics_relighting_envmap(envmap_name):
+    dataset = Dataset(DATASET_PATH, RENDER_UPSAMPLE_ITER, env=envmap_name)
+
+    current_env_images_path = os.path.join(OUTPUT_RENDER_DIR, f'./relight/{envmap_name}')
+    renders = read_RGB_images(current_env_images_path)
+
+    metrics = {
+        "psnr_rgb": [],
+        "ssim_rgb": [],
+        "lpips_rgb": []
+    }
+
+    pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Relighting Metrics")
+
+    for idx, sensor in pbar:
+        rgb_img       = renders["rgb"][idx][:, :, :3]
+        ref_rgb       = dataset.ref_images[idx][sensor.film().crop_size()[0]]
+
+        psnr_rgb_val = lpsnr(ref_rgb, rgb_img)
+        ssim_rgb_val = lssim(ref_rgb, rgb_img)
+        lpips_rgb_val = llpips(to_torch_image(ref_rgb), to_torch_image(rgb_img)).detach().item()
+
+        metrics["psnr_rgb"].append(psnr_rgb_val)
+        metrics["ssim_rgb"].append(ssim_rgb_val)
+        metrics["lpips_rgb"].append(lpips_rgb_val)
+
+    metrics["psnr_rgb_mean"] = float(np.mean(metrics['psnr_rgb']))
+    metrics["ssim_rgb_mean"] = float(np.mean(metrics['ssim_rgb']))
+    metrics["lpips_rgb_mean"] = float(np.mean(metrics['lpips_rgb']))
+    
+    print(f"\n=== {envmap_name} Final Averages ===")
+    print(f"PSNR (RGB):       {np.mean(metrics['psnr_rgb']):.3f}")
+    print(f"SSIM (RGB):       {np.mean(metrics['ssim_rgb']):.3f}")
+    print(f"LPIPS (RGB):      {np.mean(metrics['lpips_rgb']):.3f}")
+
+    save_path = os.path.join(OUTPUT_RENDER_DIR, f"{envmap_name}_results_metrics.json")
+    np.savez(save_path, **metrics)
+    print(f"[INFO] Metrics saved to {save_path}")
+
+if __name__ == "__main__":
+    metrics_training_envmap()
+
+    envmap_name_list = get_relighting_envmap_names(ENVMAP_ROOT)
+    for envmap_name in envmap_name_list:
+        metrics_relighting_envmap(envmap_name)

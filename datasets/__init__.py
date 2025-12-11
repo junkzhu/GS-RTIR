@@ -12,7 +12,8 @@ class Dataset:
         self,
         source_path,
         render_upsampler_iters=TRAIN_UPSAMPLE_ITER,
-        dataset_type="train"
+        dataset_type="train",
+        env='sunset'
     ) -> None:
         
         self.batch_size = BATCH_SIZE
@@ -36,11 +37,11 @@ class Dataset:
             assert(1==2) #TODO COLMAP
         elif DATASET_TYPE == 'TensoIR':
             self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["TensoIR"](
-                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env='sunset'
+                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env=env
             )
         elif DATASET_TYPE == 'Synthetic4Relight':
             self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["Synthetic4Relight"](
-                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type
+                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env=env
             )
         elif DATASET_TYPE == 'Stanford_orb':
             assert(1==2)

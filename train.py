@@ -2,6 +2,7 @@ import torch
 import tqdm
 import numpy as np
 from os.path import join
+from omegaconf import OmegaConf
 
 import mitsuba as mi
 mi.set_variant('cuda_ad_rgb')
@@ -19,6 +20,7 @@ from datasets import *
 from losses import *
 
 if __name__ == "__main__":
+    train_conf = OmegaConf.load('configs/train.yaml')
     dataset = Dataset(DATASET_PATH)
 
     gaussians = GaussianModel()
@@ -32,6 +34,8 @@ if __name__ == "__main__":
     # cKDTree: find the nearest k gaussians
     KD_Tree = cKDTree(gaussians._xyz)
     _, kdtree_idx = KD_Tree.query(gaussians._xyz, k=32)
+
+    gsstrategy = GSStrategyModel('configs/gs.yaml')
 
     ellipsoidsfactory = EllipsoidsFactory()
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
@@ -109,17 +113,52 @@ if __name__ == "__main__":
     params.keep(OPTIMIZE_PARAMS)
     for _, param in params.items():
         dr.enable_grad(param)
-    opt = optimizers.BoundedAdam(lr=0.01, params=params)
-    opt.set_learning_rate({'shape.normals':0.001})
-    opt.set_bounds('shape.roughnesses', lower=1e-6, upper=1-1e-6)
-    opt.set_bounds('shape.opacities', lower=1e-6, upper=1-1e-6)
-    opt.set_bounds('shape.albedos', lower=-1, upper=1)
+    opt = optimizers.BoundedAdam()
+    ellipsoids = Ellipsoid.unravel(params['shape.data'])
+    opt['centers'] = ellipsoids.center
+    opt['scales']  = ellipsoids.scale
+    opt['quats']   = mi.Vector4f(ellipsoids.quat)
+    opt['opacities'] = params['shape.opacities']
+    opt['normals'] = params['shape.normals']
+
+    opt['albedos'] = params['shape.albedos']
+    opt['roughnesses'] = params['shape.roughnesses']
+
+    opt.set_learning_rate({
+        'centers':   train_conf.optimizer.params.centers_lr,
+        'scales':    train_conf.optimizer.params.scales_lr,
+        'quats':     train_conf.optimizer.params.quats_lr,
+        'opacities': train_conf.optimizer.params.opacities_lr,
+        'normals': train_conf.optimizer.params.normals_lr,
+
+        'albedos': train_conf.optimizer.params.albedos_lr,
+        'roughnesses': train_conf.optimizer.params.roughnesses_lr
+    })
+
+    opt.set_bounds('scales',    lower=1e-6, upper=1e2)
+    opt.set_bounds('opacities', lower=1e-6, upper=1-1e-6)
+    opt.set_bounds('normals', lower=-1, upper=1)
+
+    opt.set_bounds('albedos', lower=1e-6, upper=1-1e-6)
+    opt.set_bounds('roughnesses', lower=1e-6, upper=1-1e-6)
+
+    def update_params(opt):
+        params['shape.data'] = Ellipsoid.ravel(opt['centers'], opt['scales'], mi.Quaternion4f(opt['quats']))
+        params['shape.opacities'] = opt['opacities']
+        params['shape.normals'] = opt['normals']
+        
+        params['shape.albedos'] = opt['albedos']
+        params['shape.roughnesses'] = opt['roughnesses']
+        
+        params.update()
+
+    update_params(opt)
 
     seed = 0
 
     loss_list, rgb_PSNR_list, albedo_PSNR_list, roughness_MSE_list, normal_MAE_list = [], [], [], [], []
 
-    pbar = tqdm.tqdm(range(NITER))
+    pbar = tqdm.tqdm(range(train_conf.optimizer.iterations))
     for i in pbar:
         loss = mi.Float(0.0)
         rgb_psnr = mi.Float(0.0)
@@ -127,6 +166,8 @@ if __name__ == "__main__":
         roughness_mse = mi.Float(0.0)
         normal_mae = mi.Float(0.0)
         
+        gsstrategy.lr_schedule(opt, i, train_conf.optimizer.iterations, train_conf.optimizer.scheduler.min_factor)
+
         for idx, sensor in dataset.get_sensor_iterator(i):
             img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
                                   spp=SPP * PRIMAL_SPP_MULT, spp_grad=SPP,
@@ -170,8 +211,8 @@ if __name__ == "__main__":
             normal_loss = lnormal_sqr(normal_img, fake_normal_img, normal_mask_flat) / dataset.batch_size
               
             # smooth loss
-            albedo_laplacian_loss = ldiscrete_laplacian_reg(opt['shape.albedos'], kdtree_idx) / dataset.batch_size
-            roughness_laplacian_loss = ldiscrete_laplacian_reg(opt['shape.roughnesses'], kdtree_idx) / dataset.batch_size
+            albedo_laplacian_loss = ldiscrete_laplacian_reg(opt['albedos'], kdtree_idx) / dataset.batch_size
+            roughness_laplacian_loss = ldiscrete_laplacian_reg(opt['roughnesses'], kdtree_idx) / dataset.batch_size
             laplacian_loss = albedo_laplacian_loss + roughness_laplacian_loss
 
             # total loss
@@ -217,7 +258,7 @@ if __name__ == "__main__":
             roughness_MSE_list.append(np.asarray(roughness_mse))
 
         opt.step()
-        params.update(opt)
+        update_params(opt)
 
         dataset.update_sensors(i)
 
@@ -242,7 +283,7 @@ if __name__ == "__main__":
                 envmap_img = mi.Bitmap(envmap_data)
                 mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
 
-        if (i+1) in dataset.render_upsample_iter or i == NITER - 1:
+        if (i+1) in dataset.render_upsample_iter or i == train_conf.optimizer.iterations - 1:
             plot_loss(loss_list, label='Total Loss', output_file=join(OUTPUT_DIR, 'total_loss.png'))
             plot_loss(rgb_PSNR_list, label = "RGB PSNR", output_file=join(OUTPUT_DIR, 'rgb_psnr.png'))
             plot_loss(albedo_PSNR_list, label='Albedo PSNR', output_file=join(OUTPUT_DIR, 'albedo_psnr.png'))

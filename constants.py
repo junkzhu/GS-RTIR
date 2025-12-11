@@ -55,8 +55,7 @@ NUM_SGS = 16
 
 #--------------training--------------
 BATCH_SIZE = 6
-NITER = 500
-OPTIMIZE_PARAMS = ['shape.normals','shape.albedos','shape.roughnesses']
+OPTIMIZE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.albedos', 'shape.roughnesses']
 TRAIN_UPSAMPLE_ITER = [64, 128, 256]
 
 REFINE_NITER = 500

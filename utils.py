@@ -7,6 +7,7 @@ import torch
 from emitter.sgenvmap_util import SG2Envmap
 import glob
 import os
+from pathlib import Path
 
 def resize_img(img, target_res, smooth=False):
     """Resizes a Mitsuba Bitmap using either a box filter (smooth=False)
@@ -168,3 +169,12 @@ def load_hdr_paths(root_dir):
     hdr_paths = glob.glob(os.path.join(root_dir, "*.hdr"))
     hdr_paths.sort()
     return hdr_paths
+
+def get_relighting_envmap_names(root_dir):
+    name_list = []
+    envmaps = load_hdr_paths(root_dir)
+    for envmap in envmaps:
+        #create folder
+        envmap_name = Path(envmap).stem
+        name_list.append(envmap_name)
+    return name_list

@@ -5,3 +5,5 @@ imageio
 plyfile
 scipy
 matplotlib
+lpips
+natsort
