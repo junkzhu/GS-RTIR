@@ -29,7 +29,7 @@ DATASET_NAME = args.dataset_name
 DATASET_PATH = args.dataset_path
 
 PLY_PATH = args.ply_path
-ENVMAP_PATH = 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr'
+ENVMAP_PATH = '/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k/sunset.hdr'
 
 REFINE_PATH = args.refine_path
 
@@ -48,14 +48,14 @@ USE_MIS = True
 HIDE_EMITTER = True
 
 #--------------emitter--------------
-OPTIMIZE_ENVMAP = False
+OPTIMIZE_ENVMAP = True
 
 SPHERICAL_GAUSSIAN = True
 NUM_SGS = 16
 
 #--------------training--------------
 BATCH_SIZE = 6
-NITER = 512
+NITER = 500
 OPTIMIZE_PARAMS = ['shape.normals','shape.albedos','shape.roughnesses']
 TRAIN_UPSAMPLE_ITER = [64, 128, 256]
 
@@ -69,7 +69,7 @@ RENDER_SPP = args.render_spp
 RENDER_UPSAMPLE_ITER = []
 
 RELIGHT = True
-ENVMAP_ROOT = "D:/dataset/Environment_Maps/high_res_envmaps_1k"
+ENVMAP_ROOT = "/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k"
 
 #--------------folder--------------
 __SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__))

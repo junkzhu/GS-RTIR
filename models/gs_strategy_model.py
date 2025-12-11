@@ -168,7 +168,7 @@ class GSStrategyModel:
 
     def densify_gaussians(self):
         self.clone_gaussians(self.grad_norm, self.conf.densify.clone_grad_threshold, self.conf.densify.relative_size_threshold)
-        self.split_gaussians(self.grad_norm, self.conf.densify.split_grad_threshold, self.conf.densify.split_n_gaussians)
+        self.split_gaussians(self.grad_norm, self.conf.densify.split_grad_threshold, self.conf.densify.split_n_gaussians, self.conf.densify.relative_size_threshold)
         self.split_extreme_shape_gaussian(self.grad_norm, self.conf.densify.split_grad_threshold, self.conf.densify.anisotropy_threshold, self.conf.densify.size_min, self.conf.densify.size_max)
 
     #Density-pruned
@@ -258,11 +258,11 @@ class GSStrategyModel:
         self.update_num_gaussian()
 
     #Splitted
-    def split_gaussians(self, grad, split_grad_threshold = 0.0002, relative_size_threshold = 0.01):
+    def split_gaussians(self, grad, split_grad_threshold = 0.0002, split_n_gaussians = 2, relative_size_threshold = 0.01):
         mask = (grad >= split_grad_threshold)
         mask &= (torch.max(self.scales, dim=1).values > relative_size_threshold)
 
-        stds = self.scales[mask].repeat(self.split_n_gaussians, 1)
+        stds = self.scales[mask].repeat(split_n_gaussians, 1)
         means = torch.zeros((stds.size(0), 3), device="cuda")
         samples = torch.normal(mean=means, std=stds)
         rots = self.quaternion_to_so3(self.quats[mask]).repeat(self.split_n_gaussians, 1, 1)
@@ -273,7 +273,7 @@ class GSStrategyModel:
             n_clone = mask.sum()
             print(f" Splitted {n_clone} / {n_before} ({n_clone/n_before*100:.2f}%) gaussians")
 
-        split_centers = self.centers[mask].repeat(self.split_n_gaussians, 1) + offsets  # [2N, 3]
+        split_centers = self.centers[mask].repeat(self.split_n_gaussians, 1) + offsets * 0.1  # [2N, 3]
         split_scales = self.scales[mask].repeat(self.split_n_gaussians, 1) / (0.8 * self.split_n_gaussians)
         split_quats = self.quats[mask].repeat(self.split_n_gaussians, 1)
         split_opacities = self.opacities[mask].repeat(self.split_n_gaussians, 1)

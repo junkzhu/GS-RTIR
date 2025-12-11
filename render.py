@@ -55,6 +55,7 @@ if __name__ == "__main__":
             'metallics': gaussians_attributes['metallics']
         }
     })
+    params = mi.traverse(scene_dict)
 
     albedo_list, ref_albedo_list = [], []
 
@@ -97,7 +98,8 @@ if __name__ == "__main__":
     print("albedo_scale:", three_channel_ratio)
 
     for idx, albedo_img in enumerate(albedo_list):
-        albedo_img = three_channel_ratio * albedo_img
+        albedo_bmp = albedo_img.convert(mi.Bitmap.PixelFormat.RGB, mi.Struct.Type.Float32)
+        albedo_img = three_channel_ratio * mi.TensorXf(albedo_bmp)
         albedo_bmp = mi.Bitmap(albedo_img)
 
         mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)
@@ -111,7 +113,6 @@ if __name__ == "__main__":
     #---------------relight-----------------
     if RELIGHT:
         envmaps = load_hdr_paths(ENVMAP_ROOT)
-        params = mi.traverse(scene_dict)
         
         for envmap in envmaps:
             #create folder

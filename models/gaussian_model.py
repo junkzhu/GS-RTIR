@@ -193,7 +193,7 @@ class GaussianModel:
         self._normal = self._normal / (torch.norm(self._normal, dim=1, keepdim=True) + 1e-8)
 
     def restore_from_params(self, params):
-        n = params['shape.opacities'].shape[0]
+        n = int(params['shape.normals'].shape[0]/3)
 
         if 'shape.data' in params:
             data = np.array(params['shape.data'])

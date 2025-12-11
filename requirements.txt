@@ -1,0 +1,7 @@
+mitsuba==3.7.0
+tqdm
+omegaconf
+imageio
+plyfile
+scipy
+matplotlib

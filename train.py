@@ -8,6 +8,7 @@ mi.set_variant('cuda_ad_rgb')
 
 from scipy.spatial import cKDTree
 
+import optimizers
 from constants import *
 
 from utils import *
@@ -77,7 +78,7 @@ if __name__ == "__main__":
             
             scene_config['envmap'] = {
                 'type': 'vMF',
-                'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
+                'filename': '/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
                 'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
                             mi.ScalarTransform4f.rotate([1, 0, 0], 90)
             }
@@ -108,8 +109,12 @@ if __name__ == "__main__":
     params.keep(OPTIMIZE_PARAMS)
     for _, param in params.items():
         dr.enable_grad(param)
-    opt = mi.ad.Adam(lr=0.01, params=params)
+    opt = optimizers.BoundedAdam(lr=0.01, params=params)
     opt.set_learning_rate({'shape.normals':0.001})
+    opt.set_bounds('shape.roughnesses', lower=1e-6, upper=1-1e-6)
+    opt.set_bounds('shape.opacities', lower=1e-6, upper=1-1e-6)
+    opt.set_bounds('shape.albedos', lower=-1, upper=1)
+
     seed = 0
 
     loss_list, rgb_PSNR_list, albedo_PSNR_list, roughness_MSE_list, normal_MAE_list = [], [], [], [], []
@@ -237,7 +242,7 @@ if __name__ == "__main__":
                 envmap_img = mi.Bitmap(envmap_data)
                 mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
 
-        if (i+1) in dataset.render_upsample_iter:
+        if (i+1) in dataset.render_upsample_iter or i == NITER - 1:
             plot_loss(loss_list, label='Total Loss', output_file=join(OUTPUT_DIR, 'total_loss.png'))
             plot_loss(rgb_PSNR_list, label = "RGB PSNR", output_file=join(OUTPUT_DIR, 'rgb_psnr.png'))
             plot_loss(albedo_PSNR_list, label='Albedo PSNR', output_file=join(OUTPUT_DIR, 'albedo_psnr.png'))
