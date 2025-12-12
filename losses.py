@@ -121,7 +121,7 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
     else:
         return ssim_map.mean(1).mean(1).mean(1)
 
-def ldiscrete_laplacian_reg(data, idx):
+def ldiscrete_laplacian_reg_1dim(data, idx):
     
     num_neighbors = idx.shape[1] - 1
     
@@ -134,5 +134,31 @@ def ldiscrete_laplacian_reg(data, idx):
     neighbor_avg = neighbor_sum / float(num_neighbors)
     
     laplacian = dr.sqr(c - neighbor_avg)
+
+    return dr.sum(laplacian)
+
+def ldiscrete_laplacian_reg_3dims(data, idx):
+
+    num_neighbors = idx.shape[1] - 1
+    c_idx = idx[:, 0] * 3
+
+    c = mi.Vector3f(
+        dr.gather(mi.Float, data.array, c_idx),
+        dr.gather(mi.Float, data.array, c_idx + 1),
+        dr.gather(mi.Float, data.array, c_idx + 2),
+    )
+    
+    neighbor_sum = mi.Vector3f(0.0)
+    for i in range(1, idx.shape[1]):
+        neighbor_idx = idx[:, i] * 3
+        val_0 = dr.gather(mi.Float, data.array, neighbor_idx)
+        val_1 = dr.gather(mi.Float, data.array, neighbor_idx + 1)
+        val_2 = dr.gather(mi.Float, data.array, neighbor_idx + 2)
+        
+        val = mi.Vector3f(val_0, val_1, val_2)
+        neighbor_sum += val
+    neighbor_avg = neighbor_sum / float(num_neighbors)
+    
+    laplacian = dr.squared_norm(c - neighbor_avg)
 
     return dr.sum(laplacian)

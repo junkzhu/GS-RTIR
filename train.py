@@ -19,6 +19,78 @@ from emitter import *
 from datasets import *
 from losses import *
 
+def register_optimizer(params, train_conf):
+    opt = optimizers.BoundedAdam()
+
+    ellipsoids = Ellipsoid.unravel(params['shape.data'])
+    
+    # register optimization parameters
+    opt['centers'] = ellipsoids.center
+    opt['scales']  = ellipsoids.scale
+    opt['quats']   = mi.Vector4f(ellipsoids.quat)
+    opt['opacities'] = params['shape.opacities']
+    opt['normals'] = params['shape.normals']
+
+    opt['albedos'] = params['shape.albedos']
+    opt['roughnesses'] = params['shape.roughnesses']
+
+    # set learning rate
+    lr_dict = {
+        'centers':     train_conf.optimizer.params.centers_lr,
+        'scales':      train_conf.optimizer.params.scales_lr,
+        'quats':       train_conf.optimizer.params.quats_lr,
+        'opacities':   train_conf.optimizer.params.opacities_lr,
+        'normals':     train_conf.optimizer.params.normals_lr,
+        
+        'albedos':     train_conf.optimizer.params.albedos_lr,
+        'roughnesses': train_conf.optimizer.params.roughnesses_lr,
+    }
+
+    # register envmap parameters
+    if OPTIMIZE_ENVMAP:
+        opt['envmap.position'] = params['envmap.position']
+        opt['envmap.weight'] = params['envmap.weight']
+        opt['envmap.std'] = params['envmap.std']
+        for i in range(NUM_SGS):
+            opt[f'envmap.lgtSGslobe_{i}']   = params[f'envmap.lgtSGslobe_{i}']
+            opt[f'envmap.lgtSGslambda_{i}'] = params[f'envmap.lgtSGslambda_{i}']
+            opt[f'envmap.lgtSGsmu_{i}']     = params[f'envmap.lgtSGsmu_{i}']
+
+        for i in range(NUM_SGS):
+            lr_dict[f'envmap.lgtSGslobe_{i}']   = train_conf.optimizer.params.envmap.sg_lobe_lr
+            lr_dict[f'envmap.lgtSGslambda_{i}'] = train_conf.optimizer.params.envmap.sg_lambda_lr
+            lr_dict[f'envmap.lgtSGsmu_{i}']     = train_conf.optimizer.params.envmap.sg_mu_lr
+
+    opt.set_learning_rate(lr_dict)
+
+    opt.set_bounds('scales',    lower=1e-6, upper=1e2)
+    opt.set_bounds('opacities', lower=1e-6, upper=1-1e-6)
+    opt.set_bounds('normals', lower=-1, upper=1)
+
+    opt.set_bounds('albedos', lower=1e-6, upper=1-1e-6)
+    opt.set_bounds('roughnesses', lower=1e-6, upper=1-1e-6)
+
+    return opt
+
+def update_params(opt, params):
+    params['shape.data'] = Ellipsoid.ravel(opt['centers'], opt['scales'], mi.Quaternion4f(opt['quats']))
+    params['shape.opacities'] = opt['opacities']
+    params['shape.normals'] = opt['normals']
+    
+    params['shape.albedos'] = opt['albedos']
+    params['shape.roughnesses'] = opt['roughnesses']
+    
+    if OPTIMIZE_ENVMAP:
+        params['envmap.position'] = opt['envmap.position']
+        params['envmap.weight'] = opt['envmap.weight']
+        params['envmap.std'] = opt['envmap.std']
+        for i in range(NUM_SGS):
+            params[f'envmap.lgtSGslobe_{i}']   = opt[f'envmap.lgtSGslobe_{i}']
+            params[f'envmap.lgtSGslambda_{i}'] = opt[f'envmap.lgtSGslambda_{i}']
+            params[f'envmap.lgtSGsmu_{i}']     = opt[f'envmap.lgtSGsmu_{i}']
+
+    params.update()
+
 if __name__ == "__main__":
     train_conf = OmegaConf.load('configs/train.yaml')
     dataset = Dataset(DATASET_PATH)
@@ -113,46 +185,9 @@ if __name__ == "__main__":
     params.keep(OPTIMIZE_PARAMS)
     for _, param in params.items():
         dr.enable_grad(param)
-    opt = optimizers.BoundedAdam()
-    ellipsoids = Ellipsoid.unravel(params['shape.data'])
-    opt['centers'] = ellipsoids.center
-    opt['scales']  = ellipsoids.scale
-    opt['quats']   = mi.Vector4f(ellipsoids.quat)
-    opt['opacities'] = params['shape.opacities']
-    opt['normals'] = params['shape.normals']
 
-    opt['albedos'] = params['shape.albedos']
-    opt['roughnesses'] = params['shape.roughnesses']
-
-    opt.set_learning_rate({
-        'centers':   train_conf.optimizer.params.centers_lr,
-        'scales':    train_conf.optimizer.params.scales_lr,
-        'quats':     train_conf.optimizer.params.quats_lr,
-        'opacities': train_conf.optimizer.params.opacities_lr,
-        'normals': train_conf.optimizer.params.normals_lr,
-
-        'albedos': train_conf.optimizer.params.albedos_lr,
-        'roughnesses': train_conf.optimizer.params.roughnesses_lr
-    })
-
-    opt.set_bounds('scales',    lower=1e-6, upper=1e2)
-    opt.set_bounds('opacities', lower=1e-6, upper=1-1e-6)
-    opt.set_bounds('normals', lower=-1, upper=1)
-
-    opt.set_bounds('albedos', lower=1e-6, upper=1-1e-6)
-    opt.set_bounds('roughnesses', lower=1e-6, upper=1-1e-6)
-
-    def update_params(opt):
-        params['shape.data'] = Ellipsoid.ravel(opt['centers'], opt['scales'], mi.Quaternion4f(opt['quats']))
-        params['shape.opacities'] = opt['opacities']
-        params['shape.normals'] = opt['normals']
-        
-        params['shape.albedos'] = opt['albedos']
-        params['shape.roughnesses'] = opt['roughnesses']
-        
-        params.update()
-
-    update_params(opt)
+    opt = register_optimizer(params, train_conf)
+    update_params(opt, params)
 
     seed = 0
 
@@ -211,8 +246,8 @@ if __name__ == "__main__":
             normal_loss = lnormal_sqr(normal_img, fake_normal_img, normal_mask_flat) / dataset.batch_size
               
             # smooth loss
-            albedo_laplacian_loss = ldiscrete_laplacian_reg(opt['albedos'], kdtree_idx) / dataset.batch_size
-            roughness_laplacian_loss = ldiscrete_laplacian_reg(opt['roughnesses'], kdtree_idx) / dataset.batch_size
+            albedo_laplacian_loss = ldiscrete_laplacian_reg_3dims(opt['albedos'], kdtree_idx) / dataset.batch_size
+            roughness_laplacian_loss = ldiscrete_laplacian_reg_1dim(opt['roughnesses'], kdtree_idx) / dataset.batch_size
             laplacian_loss = albedo_laplacian_loss + roughness_laplacian_loss
 
             # total loss
@@ -258,7 +293,7 @@ if __name__ == "__main__":
             roughness_MSE_list.append(np.asarray(roughness_mse))
 
         opt.step()
-        update_params(opt)
+        update_params(opt, params)
 
         dataset.update_sensors(i)
 

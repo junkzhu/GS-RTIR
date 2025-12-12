@@ -1,13 +1,19 @@
 optimizer:
   iterations: 500
   params:
-    centers_lr: 0.0002
-    scales_lr: 0.0002
-    quats_lr: 0.0002
-    opacities_lr: 0.005
-    normals_lr: 0.001
+    centers_lr: 0.0001
+    scales_lr: 0.0001
+    quats_lr: 0.0001
+    normals_lr: 0.0001
+
+    opacities_lr: 0.001
     albedos_lr: 0.01
     roughnesses_lr: 0.01
+
+    envmap:
+      sg_lobe_lr: 0.01
+      sg_lambda_lr: 0.01
+      sg_mu_lr: 0.01
 
   scheduler:
     type: cosine

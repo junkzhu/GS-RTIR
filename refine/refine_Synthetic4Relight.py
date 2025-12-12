@@ -204,10 +204,6 @@ if __name__ == "__main__":
             gaussians.restore_from_params(params)
             gaussians.save_ply(REFINE_PATH)
 
-        if (i+1) == 300:
-            gaussians.restore_from_params(params)
-            gaussians.save_ply("/home/zjk/datasets/Synthetic4Relight/3dgrt/chair_refined_300.ply")
-
     plot_loss(psnr_list, label='PSNR', output_file=join(OUTPUT_REFINE_DIR, 'psnr.png'))
     plot_loss(mae_list, label='MAE', output_file=join(OUTPUT_REFINE_DIR, 'mae.png'))
 
