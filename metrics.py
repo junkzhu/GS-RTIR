@@ -210,8 +210,10 @@ def metrics_relighting_envmap(envmap_name):
     print(f"[INFO] Metrics saved to {save_path}")
 
 if __name__ == "__main__":
+    
     metrics_training_envmap()
 
-    envmap_name_list = get_relighting_envmap_names(ENVMAP_ROOT)
-    for envmap_name in envmap_name_list:
-        metrics_relighting_envmap(envmap_name)
+    if DATASET_TYPE == "TensoIR":
+        envmap_name_list = get_relighting_envmap_names(ENVMAP_ROOT)
+        for envmap_name in envmap_name_list:
+            metrics_relighting_envmap(envmap_name)

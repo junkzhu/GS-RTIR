@@ -19,6 +19,70 @@ from emitter import *
 from datasets import *
 from losses import *
 
+def load_scene_config():
+    global OPTIMIZE_PARAMS
+    scene_config = {
+        'type': 'scene',
+        'integrator': {
+            'type': INTEGRATOR,
+            'max_depth': MAX_BOUNCE_NUM,
+            'pt_rate': SPP_PT_RATE,
+            'gaussian_max_depth': 128,
+            'hide_emitters': HIDE_EMITTER,
+            'use_mis': USE_MIS
+        },
+        'shape': {
+            'type': 'ellipsoidsmesh',
+            'centers': gaussians_attributes['centers'],
+            'scales': gaussians_attributes['scales'],
+            'quaternions': gaussians_attributes['quats'],
+            'opacities': gaussians_attributes['sigmats'],
+            'sh_coeffs': gaussians_attributes['features'],
+
+            'normals': gaussians_attributes['normals'],
+            'albedos': gaussians_attributes['albedos'],
+            'roughnesses': gaussians_attributes['roughnesses'],
+            'metallics': gaussians_attributes['metallics']
+        }
+    }
+
+    if OPTIMIZE_ENVMAP:
+        if SPHERICAL_GAUSSIAN:
+            # register SG envmap
+            SGModel(
+                num_sgs = NUM_SGS,
+                #sg_init = np.load("output/final_optimized_sgs.npy")
+            )
+            
+            scene_config['envmap'] = {
+                'type': 'vMF',
+                'filename': '/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
+                'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
+                            mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+            }
+            OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
+            OPTIMIZE_PARAMS += ['envmap.position'] + ['envmap.weight'] + ['envmap.std']
+        
+        else:
+            scene_config['envmap'] = {
+                'type': 'envmap',
+                'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/init_1280_640.exr',
+                'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
+                            mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+            }
+            OPTIMIZE_PARAMS += ['envmap.data']
+
+    else:
+        scene_config['emitter'] = {
+            'type': 'envmap',
+            'id': 'EnvironmentMapEmitter',
+            'filename': ENVMAP_PATH,
+            'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
+                        mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+        }
+    
+    return scene_config
+
 def register_optimizer(params, train_conf):
     opt = optimizers.BoundedAdam()
 
@@ -119,65 +183,7 @@ if __name__ == "__main__":
 
 
     #---------------------------------- config ----------------------------------
-    scene_config = {
-        'type': 'scene',
-        'integrator': {
-            'type': INTEGRATOR,
-            'max_depth': MAX_BOUNCE_NUM,
-            'pt_rate': SPP_PT_RATE,
-            'gaussian_max_depth': 128,
-            'hide_emitters': HIDE_EMITTER,
-            'use_mis': USE_MIS
-        },
-        'shape': {
-            'type': 'ellipsoidsmesh',
-            'centers': gaussians_attributes['centers'],
-            'scales': gaussians_attributes['scales'],
-            'quaternions': gaussians_attributes['quats'],
-            'opacities': gaussians_attributes['sigmats'],
-            'sh_coeffs': gaussians_attributes['features'],
-
-            'normals': gaussians_attributes['normals'],
-            'albedos': gaussians_attributes['albedos'],
-            'roughnesses': gaussians_attributes['roughnesses'],
-            'metallics': gaussians_attributes['metallics']
-        }
-    }
-
-    if OPTIMIZE_ENVMAP:
-        if SPHERICAL_GAUSSIAN:
-            # register SG envmap
-            SGModel(
-                num_sgs = NUM_SGS,
-                #sg_init = np.load("output/final_optimized_sgs.npy")
-            )
-            
-            scene_config['envmap'] = {
-                'type': 'vMF',
-                'filename': '/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
-                'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
-                            mi.ScalarTransform4f.rotate([1, 0, 0], 90)
-            }
-            OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
-            OPTIMIZE_PARAMS += ['envmap.position'] + ['envmap.weight'] + ['envmap.std']
-        
-        else:
-            scene_config['envmap'] = {
-                'type': 'envmap',
-                'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/init_1280_640.exr',
-                'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
-                            mi.ScalarTransform4f.rotate([1, 0, 0], 90)
-            }
-            OPTIMIZE_PARAMS += ['envmap.data']
-
-    else:
-        scene_config['emitter'] = {
-            'type': 'envmap',
-            'id': 'EnvironmentMapEmitter',
-            'filename': ENVMAP_PATH,
-            'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
-                        mi.ScalarTransform4f.rotate([1, 0, 0], 90)
-        }
+    scene_config = load_scene_config()
 
     scene_dict = mi.load_dict(scene_config)
 
@@ -251,7 +257,12 @@ if __name__ == "__main__":
             laplacian_loss = albedo_laplacian_loss + roughness_laplacian_loss
 
             # total loss
-            total_loss = view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 1e-5 * laplacian_loss + 0.05 * priors_loss
+            total_loss = mi.TensorXf([0.0])
+            if i < 64: # warm up
+                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 1e-4 * laplacian_loss + 0.1 * priors_loss
+            else:
+                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 0.05 * priors_loss
+
             dr.backward(total_loss)
 
             loss += total_loss
@@ -312,13 +323,14 @@ if __name__ == "__main__":
             if SPHERICAL_GAUSSIAN:
                 envmap_img = render_envmap_bitmap(params=params, num_sgs=NUM_SGS)
                 mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
-
+                if (i in SAVE_ENVMAP_ITER) or i == train_conf.optimizer.iterations - 1:
+                    save_sg_envmap(params, NUM_SGS, i)
             else:
                 envmap_data = params['envmap.data']
                 envmap_img = mi.Bitmap(envmap_data)
                 mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
 
-        if (i+1) in dataset.render_upsample_iter or i == train_conf.optimizer.iterations - 1:
+        if (i in dataset.render_upsample_iter) or i == train_conf.optimizer.iterations - 1:
             plot_loss(loss_list, label='Total Loss', output_file=join(OUTPUT_DIR, 'total_loss.png'))
             plot_loss(rgb_PSNR_list, label = "RGB PSNR", output_file=join(OUTPUT_DIR, 'rgb_psnr.png'))
             plot_loss(albedo_PSNR_list, label='Albedo PSNR', output_file=join(OUTPUT_DIR, 'albedo_psnr.png'))

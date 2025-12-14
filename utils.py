@@ -8,6 +8,7 @@ from emitter.sgenvmap_util import SG2Envmap
 import glob
 import os
 from pathlib import Path
+from constants import *
 
 def resize_img(img, target_res, smooth=False):
     """Resizes a Mitsuba Bitmap using either a box filter (smooth=False)
@@ -135,6 +136,10 @@ def render_envmap_bitmap(params, num_sgs):
     lgtSGs_torch = torch.tensor(lgtSGs, dtype=torch.float32)
     envmap = SG2Envmap(lgtSGs_torch, 256, 512).detach().cpu().numpy()
     return mi.Bitmap(envmap)
+
+def save_sg_envmap(params, num_sgs, iter):
+    lgtSGs = get_lgtSGs(params, num_sgs)
+    np.save(f"{OUTPUT_ENVMAP_DIR}/optimized_sgs_{iter:04d}.npy", lgtSGs)
 
 def compute_rescale_ratio(gt_albedo_list, albedo_list):
     

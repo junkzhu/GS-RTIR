@@ -8,15 +8,17 @@ timestamp = time.strftime("%d%m_%H%M%S")
 def get_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--dataset_type", help="Synthetic4Relight")
-    parser.add_argument("--dataset_name", help="chair")
-    parser.add_argument("--dataset_path", help="E:/dataset/Synthetic4Relight/chair")
+    parser.add_argument("--dataset_type", help="The name of the dataset.")
+    parser.add_argument("--dataset_name", help="The name of the scene.")
+    parser.add_argument("--dataset_path", help="The path to the dataset directory.")
 
-    parser.add_argument("--ply_path", help="E:/dataset/Synthetic4Relight/chair.ply")
-    parser.add_argument("--refine_path", help="E:/dataset/Synthetic4Relight/chair_refined.ply")
+    parser.add_argument("--ply_path", help="The path to the input .ply file.")
+    parser.add_argument("--refine_path", help="The path to the refined output .ply file.")
 
     #--------------render & metrics--------------
-    parser.add_argument("--render_spp", type=int, default=128, help="number of samples per pixel for rendering")
+    parser.add_argument("--render_spp", type=int, default=128, help="The number of samples per pixel for rendering.")
+    parser.add_argument("--relight", action="store_true", help="Whether to relight the scene.")
+    parser.add_argument("--envmap_init_path", help="The path to the initial environment map npy.")
 
     args = parser.parse_args()
     return args
@@ -53,6 +55,9 @@ OPTIMIZE_ENVMAP = True
 SPHERICAL_GAUSSIAN = True
 NUM_SGS = 16
 
+SAVE_ENVMAP_ITER = [64, 128, 256]
+ENVMAP_INIT_PATH = args.envmap_init_path
+
 #--------------training--------------
 BATCH_SIZE = 6
 OPTIMIZE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.albedos', 'shape.roughnesses']
@@ -67,7 +72,7 @@ REFINE_UPSAMPLE_ITER = []
 RENDER_SPP = args.render_spp
 RENDER_UPSAMPLE_ITER = []
 
-RELIGHT = True
+RELIGHT = args.relight
 ENVMAP_ROOT = "/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k"
 
 #--------------folder--------------

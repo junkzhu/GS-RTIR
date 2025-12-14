@@ -15,6 +15,70 @@ from integrators import *
 from datasets import *
 from losses import *
 
+def load_scene_config(envmap_init_path):
+    global OPTIMIZE_PARAMS
+    scene_config = {
+        'type': 'scene',
+        'integrator': {
+            'type': INTEGRATOR,
+            'max_depth': MAX_BOUNCE_NUM,
+            'pt_rate': SPP_PT_RATE,
+            'gaussian_max_depth': 128,
+            'hide_emitters': HIDE_EMITTER,
+            'use_mis': USE_MIS
+        },
+        'shape': {
+            'type': 'ellipsoidsmesh',
+            'centers': gaussians_attributes['centers'],
+            'scales': gaussians_attributes['scales'],
+            'quaternions': gaussians_attributes['quats'],
+            'opacities': gaussians_attributes['sigmats'],
+            'sh_coeffs': gaussians_attributes['features'],
+
+            'normals': gaussians_attributes['normals'],
+            'albedos': gaussians_attributes['albedos'],
+            'roughnesses': gaussians_attributes['roughnesses'],
+            'metallics': gaussians_attributes['metallics']
+        }
+    }
+
+    if OPTIMIZE_ENVMAP:
+        if SPHERICAL_GAUSSIAN:
+            # register SG envmap
+            SGModel(
+                num_sgs = NUM_SGS,
+                sg_init = np.load(envmap_init_path)
+            )
+            
+            scene_config['envmap'] = {
+                'type': 'vMF',
+                'filename': '/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
+                'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
+                            mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+            }
+            OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
+            OPTIMIZE_PARAMS += ['envmap.position'] + ['envmap.weight'] + ['envmap.std']
+        
+        else:
+            scene_config['envmap'] = {
+                'type': 'envmap',
+                'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/init_1280_640.exr',
+                'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
+                            mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+            }
+            OPTIMIZE_PARAMS += ['envmap.data']
+
+    else:
+        scene_config['emitter'] = {
+            'type': 'envmap',
+            'id': 'EnvironmentMapEmitter',
+            'filename': ENVMAP_PATH,
+            'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
+                        mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+        }
+    
+    return scene_config
+
 def render_relight_images(gaussians, dataset, scene_dict, params):
     # update albedo
     ellipsoidsfactory = EllipsoidsFactory()
@@ -45,7 +109,7 @@ def render_materials(dataset, scene_dict, integrator):
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Rendering views")
 
     for idx, sensor in pbar:
-        _, aovs = mi.render(scene_dict, sensor=sensor, spp=RENDER_SPP, integrator=integrator)
+        img, aovs = mi.render(scene_dict, sensor=sensor, spp=RENDER_SPP, integrator=integrator)
         
         #aovs
         albedo_img = aovs['albedo'][:, :, :3]
@@ -67,6 +131,9 @@ def render_materials(dataset, scene_dict, integrator):
 
         albedo_list.append(albedo_bmp)
         ref_albedo_list.append(dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]])
+
+        rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
+        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}' + ('.png')), rgb_bmp)
 
     single_channel_ratio, three_channel_ratio = compute_rescale_ratio(ref_albedo_list, albedo_list)
     print("Albedo scale:", three_channel_ratio)
@@ -90,36 +157,7 @@ if __name__ == "__main__":
     ellipsoidsfactory = EllipsoidsFactory()
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
 
-    scene_dict = mi.load_dict({
-        'type': 'scene',
-        'emitter': { 
-            'type': 'envmap',
-            'id': 'EnvironmentMapEmitter',
-            'filename': ENVMAP_PATH,
-            'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
-                        mi.ScalarTransform4f.rotate([1, 0, 0], 90)
-        },
-        'integrator': {
-            'type': INTEGRATOR,
-            'max_depth': MAX_BOUNCE_NUM,
-            'gaussian_max_depth': 128,
-            'hide_emitters': True,
-            'use_mis': True
-        },
-        'shape': {
-            'type': 'ellipsoidsmesh',
-            'centers': gaussians_attributes['centers'],
-            'scales': gaussians_attributes['scales'],
-            'quaternions': gaussians_attributes['quats'],
-            'opacities': gaussians_attributes['sigmats'],
-            'sh_coeffs': gaussians_attributes['features'],
-
-            'normals': gaussians_attributes['normals'],
-            'albedos': gaussians_attributes['albedos'],
-            'roughnesses': gaussians_attributes['roughnesses'],
-            'metallics': gaussians_attributes['metallics']
-        }
-    })
+    scene_dict = load_scene_config(ENVMAP_INIT_PATH)
     params = mi.traverse(scene_dict)
 
     aov_integrator = mi.load_dict({
