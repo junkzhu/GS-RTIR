@@ -482,7 +482,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             active &= si_cur.is_valid()
             num[active] += 1
 
-            active &= T > 0.01
+            active &= (T > 0.01)
             active &= num < self.gaussian_max_depth
 
             # sample_rr = sampler.next_1d() # Ensures the same sequence of random number is drawn for the primal and adjoint passes.

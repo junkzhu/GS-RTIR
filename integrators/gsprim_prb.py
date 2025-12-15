@@ -9,6 +9,9 @@ from .reparam import ReparamIntegrator
 class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
     def __init__(self, props):
         super().__init__(props)
+        rr_depth       = int(props.get('rr_depth', 2))
+        self.rr_depth  = mi.UInt32(rr_depth if rr_depth > 0 else 2**32-1)
+        self.use_rr = rr_depth < self.max_depth
 
     def aovs(self):
         return []
@@ -375,6 +378,17 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
             depth[si_cur.is_valid()] += 1
             
+            # Perform russian roulette
+            sample_rr = sampler.next_1d() # Ensures the same sequence of random number is drawn for the primal and adjoint passes.
+            if primal and self.use_rr:
+                q = dr.minimum(dr.max(β), 0.99)
+                perform_rr = (depth > self.rr_depth)
+                active_next &= (sample_rr < q) | ~perform_rr
+                β[perform_rr] = β * dr.rcp(q)
+            active_next &= dr.any(β > 0.005)
+            active_next &= dr.any((β != 0.0))
+
+            # Set config for next iteration
             state_cur = dr.detach(state_next)
             active_prev = mi.Bool(active)
             active = mi.Bool(active_next)

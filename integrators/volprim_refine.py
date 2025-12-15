@@ -121,7 +121,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
 
     @dr.syntax
-    def ray_marching_loop(self, scene, primal, ray, δA, δD, δN, state_in, active):
+    def ray_marching_loop(self, scene, sampler, primal, ray, δA, δD, δN, state_in, active):
         
         num = mi.UInt32(0)
         active = mi.Mask(active)
@@ -137,8 +137,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         δD = mi.Spectrum(δD if δD is not None else 0)
         δN = mi.Spectrum(δN if δN is not None else 0)
 
-        β = mi.Spectrum(1.0) #for rgb
-        T = mi.Float(1.0) #for aovs
+        T = mi.Float(1.0)
 
         depth_acc = mi.Float(0.0)
         while dr.hint(active, label="Ray Marching"):
@@ -159,7 +158,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
                 weight = T * (1.0 - transmission)
 
-                color = β * (1.0 - transmission) * sh_color
+                color = weight * sh_color
                 color[~dr.isfinite(color)] = 0.0
 
                 depth[active] = weight * depth_acc
@@ -174,7 +173,6 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             N[active] = (N + normal) if primal else (N - normal / weight_acc)
             weight_acc[active]= (weight_acc + weight) if primal else (weight_acc - weight)
 
-            β[active] *= transmission
             T[active] *= transmission
 
             ray.o[active] = si_cur.p + ray.d * 1e-4
@@ -200,10 +198,17 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             active &= si_cur.is_valid()
             num[active] += 1
 
-            β_max = dr.max(β)
-
-            active &= β_max > 0.01
+            active &= T > 0.01
             active &= num < self.gaussian_max_depth
+
+            # Perform Russian Roulette
+            # sample_rr = sampler.next_1d() # Ensures the same sequence of random number is drawn for the primal and adjoint passes.
+            # if primal and num >= 10:
+            #     rr_prob = dr.maximum(T, 0.1)
+            #     rr_active = T < 0.1
+            #     T = dr.select(rr_active, T * dr.rcp(rr_prob), T)
+            #     rr_continue = sample_rr < rr_prob
+            #     active &= ~rr_active | rr_continue
 
         D = D / dr.maximum(weight_acc, 1e-8)
         N = N / dr.maximum(weight_acc, 1e-8)
@@ -223,7 +228,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
         result_N = mi.Spectrum(0.0)
         result_D = mi.Spectrum(0.0)
 
-        A_raw, D_raw, N_raw, active, weight_acc = self.ray_marching_loop(scene, (primal|forward), ray, δA, δD, δN, state_in, active)
+        A_raw, D_raw, N_raw, active, weight_acc = self.ray_marching_loop(scene, sampler, (primal|forward), ray, δA, δD, δN, state_in, active)
 
         with dr.resume_grad(when= forward):
             if forward:
