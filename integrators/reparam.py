@@ -336,9 +336,10 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             Le[active] = β * (1.0 - transmission) * emission
             Le[~dr.isfinite(Le)] = 0.0
 
-            valid_gs = dr.dot(ray.d, normals_val) < 0.0
+            #valid_gs = dr.dot(ray.d, normals_val) < 0.0
+            #weight = dr.select(valid_gs, T * (1.0 - transmission), 0.0)
 
-            weight = dr.select(valid_gs, T * (1.0 - transmission), 0.0)
+            weight = T * (1.0 - transmission)
 
             albedo = weight * albedo_val
             albedo[~dr.isfinite(albedo)] = 0.0
@@ -364,7 +365,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             weight_acc[active]= (weight_acc + weight)
             
             β[active] *= transmission
-            T[active] *= dr.select(valid_gs, transmission, 1.0)
+            #T[active] *= dr.select(valid_gs, transmission, 1.0)
+            T[active] *= transmission
 
             ray.o[active] = si.p + ray.d * 1e-4
  
@@ -424,9 +426,10 @@ class ReparamIntegrator(mi.SamplingIntegrator):
                 normals_val, albedo_val, roughness_val, metallic_val = self.eval_bsdf_component(si_cur, ray, active)
                 transmission = self.eval_transmission(si_cur, ray, active)
 
-                valid_gs = dr.dot(ray.d, normals_val) < 0.0
+                #valid_gs = dr.dot(ray.d, normals_val) < 0.0
+                #weight = dr.select(valid_gs, T * (1.0 - transmission), 0.0)
 
-                weight = dr.select(valid_gs, T * (1.0 - transmission), 0.0)
+                weight = T * (1.0 - transmission)
 
                 albedo = weight * albedo_val
                 albedo[~dr.isfinite(albedo)] = 0.0
@@ -451,7 +454,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             N[active] = (N + normal) if primal else (N - normal / weight_acc)
             weight_acc[active]= (weight_acc + weight) if primal else (weight_acc - weight)
 
-            T[active] *= dr.select(valid_gs, transmission, 1.0)
+            #T[active] *= dr.select(valid_gs, transmission, 1.0)
+            T[active] *= transmission
 
             ray.o[active] = si_cur.p + ray.d * 1e-4
             depth_acc[active] += 1e-4
