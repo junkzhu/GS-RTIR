@@ -229,7 +229,8 @@ if __name__ == "__main__":
             depth_img = aovs['depth'][:, :, :1]
             normal_img = aovs['normal'][:, :, :3]
             
-            normal_mask = np.any(normal_img != 0, axis=2, keepdims=True)
+            normal_norm = np.linalg.norm(normal_img, axis=2, keepdims=True)
+            normal_mask = normal_norm > 0.5
             normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
 
             view_loss = l1(img, ref_img) / dataset.batch_size
@@ -274,7 +275,7 @@ if __name__ == "__main__":
             roughness_bmp = resize_img(mi.Bitmap(roughness_img), dataset.target_res)
             #metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
             depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
-            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img+1)/2, 0))), dataset.target_res) 
+            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img + 1.0)/2 , 0))), dataset.target_res) 
 
             mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}' + ('.png')), rgb_bmp)
             mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}_ref' + ('.png')), rgb_ref_bmp)
