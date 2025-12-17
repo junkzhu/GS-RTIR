@@ -169,7 +169,7 @@ class GSStrategyModel:
     def densify_gaussians(self):
         self.clone_gaussians(self.grad_norm, self.conf.densify.clone_grad_threshold, self.conf.densify.relative_size_threshold)
         self.split_gaussians(self.grad_norm, self.conf.densify.split_grad_threshold, self.conf.densify.split_n_gaussians, self.conf.densify.relative_size_threshold)
-        self.split_extreme_shape_gaussian(self.grad_norm, self.conf.densify.split_grad_threshold, self.conf.densify.anisotropy_threshold, self.conf.densify.size_min, self.conf.densify.size_max)
+        #self.split_extreme_shape_gaussian(self.grad_norm, self.conf.densify.split_extreme_shape_grad_threshold, self.conf.densify.anisotropy_threshold, self.conf.densify.size_min, self.conf.densify.size_max)
 
     #Density-pruned
     def prune_gaussians_opacity(self, prune_opacity_threshold=0.1):
@@ -210,8 +210,8 @@ class GSStrategyModel:
 
         self.update_num_gaussian()
 
-    def split_extreme_shape_gaussian(self, grad, split_grad_threshold = 0.0002, anisotropy_threshold = 10.0, size_min = 0.002, size_max = 0.2):
-        mask = (grad >= split_grad_threshold)
+    def split_extreme_shape_gaussian(self, grad, split_extreme_shape_grad_threshold = 0.0002, anisotropy_threshold = 10.0, size_min = 0.002, size_max = 0.2):
+        mask = (grad >= split_extreme_shape_grad_threshold)
         
         anisotropy = torch.max(self.scales, dim=1).values / torch.min(self.scales, dim=1).values
         extreme_shape = anisotropy > anisotropy_threshold

@@ -26,69 +26,137 @@ def set_sensor_res(sensor, res):
     sensor.parameters_changed()
     params.update()
 
-def convert_depth_to_normal(depth_map, sensor, fov_deg=39.0, pad=2, depth_thresh=0.01):
+def _shift_tensor_2d(x, dy, dx):
+    """
+    Shift a (H, W) tensor by (dy, dx) with edge replication.
+    dy > 0 : shift down
+    dy < 0 : shift up
+    dx > 0 : shift right
+    dx < 0 : shift left
+    """
+    H, W = x.shape[:2]
 
-    if not isinstance(depth_map, dr.cuda.TensorXf):
-        depth_map = dr.cuda.TensorXf(depth_map)
-    
+    # --- shift in y ---
+    if dy > 0:
+        # pad top with dy rows
+        pad = x[0:1, :]
+        pad = dr.concat([pad] * dy, axis=0)
+        x = dr.concat([pad, x[:H-dy, :]], axis=0)
+
+    elif dy < 0:
+        # pad bottom with -dy rows
+        pad = x[H-1:H, :]
+        pad = dr.concat([pad] * (-dy), axis=0)
+        x = dr.concat([x[-dy:, :], pad], axis=0)
+
+    # --- shift in x ---
+    if dx > 0:
+        # pad left with dx columns
+        pad = x[:, 0:1]
+        pad = dr.concat([pad] * dx, axis=1)
+        x = dr.concat([pad, x[:, :W-dx]], axis=1)
+
+    elif dx < 0:
+        # pad right with -dx columns
+        pad = x[:, W-1:W]
+        pad = dr.concat([pad] * (-dx), axis=1)
+        x = dr.concat([x[:, -dx:], pad], axis=1)
+
+    return x
+
+
+def convert_depth_to_normal(depth_map, sensor, fov_deg=39.0, pad=2, depth_thresh=0.01):
+    """
+    Fully differentiable wrt depth_map (no NumPy ops that depend on depth).
+    - depth_map: (H, W) or (H, W, 1) drjit tensor (TensorXf) preferred
+    - returns: (H, W, 3) normal in world space
+    """
+
+    # --- Ensure depth is a Dr.Jit tensor (keep AD graph if it exists) ---
+    # Accept (H,W) or (H,W,1)
+    if hasattr(depth_map, "shape"):
+        pass
+    else:
+        # fallback: make a tensor (this path is non-AD if input is plain array)
+        depth_map = mi.TensorXf(depth_map)
+
     H, W = depth_map.shape[:2]
+
+    # Make z shape (H,W)
+    if len(depth_map.shape) == 3:
+        z = depth_map[:, :, 0]
+    else:
+        z = depth_map
+
+    # --- Camera intrinsics ---
     fov_rad = float(fov_deg * np.pi / 180.0)
     fx = fy = float(W / (2.0 * np.tan(fov_rad / 2.0)))
     cx, cy = float(W / 2.0), float(H / 2.0)
-    
-    windows = np.lib.stride_tricks.sliding_window_view(depth_map, (2*pad+1,2*pad+1), axis=(0, 1))
-    mask_region = np.all(windows > depth_thresh, axis=(3, 4)) #H-4,W-4
-    mask = np.zeros((H, W, 1), dtype=bool)
-    mask[pad:H-pad, pad:W-pad] = mask_region
 
-    xx, yy = np.meshgrid(np.arange(W), np.arange(H))
-    xx = dr.cuda.TensorXf(xx)
-    yy = dr.cuda.TensorXf(yy)    
-    
-    z = depth_map
-    X = (xx[:,:,np.newaxis] - cx) * z / fx
-    Y = (yy[:,:,np.newaxis] - cy) * z / fy
-    P = dr.concat([X, Y, z], axis=2)
+    # --- Differentiable "valid mask": window min-filter > thresh ---
+    # This replaces NumPy sliding_window_view + np.all(...)
+    depth_min = z
+    if pad > 0:
+        for dy in range(-pad, pad + 1):
+            for dx in range(-pad, pad + 1):
+                shifted = _shift_tensor_2d(z, dy, dx)
+                depth_min = dr.minimum(depth_min, shifted)
 
-    P_left   = dr.concat([P[:,0:1,:],   P[:,:-1,:]], axis=1)
-    P_right  = dr.concat([P[:,1:,:],    P[:,-1:,:]], axis=1)
-    P_up     = dr.concat([P[0:1,:,:],   P[:-1,:,:]], axis=0)
-    P_down   = dr.concat([P[1:,:,:],    P[-1:,:,:]], axis=0)
+    mask2d = depth_min > depth_thresh  # (H,W) boolean tensor (drjit)
+    mask = mask2d[:, :, None]          # (H,W,1)
 
-    depth = z
+    # --- Build pixel grids (xx, yy) ---
+    # This is OK to do with NumPy because it does NOT depend on depth,
+    # and it won't break depth gradients.
+    xx, yy = np.meshgrid(np.arange(W, dtype=np.float32),
+                         np.arange(H, dtype=np.float32))
+    xx = mi.TensorXf(xx)
+    yy = mi.TensorXf(yy)
 
-    depth_left  = dr.concat([depth[:,0:1],  depth[:,:-1]], axis=1)
-    depth_right = dr.concat([depth[:,1:],   depth[:,-1:]], axis=1)
-    depth_up    = dr.concat([depth[0:1,:],  depth[:-1,:]], axis=0)
-    depth_down  = dr.concat([depth[1:,:],   depth[-1:,:]], axis=0)
+    # --- Backproject to camera space points P(x,y) ---
+    X = (xx - cx) * z / fx
+    Y = (yy - cy) * z / fy
+    P = dr.concat([X[:, :, None], Y[:, :, None], z[:, :, None]], axis=2)  # (H,W,3)
 
-    cond_x = dr.abs(depth_left - depth) < dr.abs(depth_right - depth)
-    ddx = dr.select(cond_x, P - P_left, P_right - P)
+    # Neighbor points (edge replicated)
+    P_left  = dr.concat([P[:, 0:1, :],  P[:, :-1, :]], axis=1)
+    P_right = dr.concat([P[:, 1:, :],   P[:, -1:, :]], axis=1)
+    P_up    = dr.concat([P[0:1, :, :],  P[:-1, :, :]], axis=0)
+    P_down  = dr.concat([P[1:, :, :],   P[-1:, :, :]], axis=0)
 
-    cond_y = dr.abs(depth_down - depth) < dr.abs(depth_up - depth)
-    ddy = dr.select(cond_y, P - P_down, P_up - P)
+    # Depth neighbors for adaptive differencing (still differentiable)
+    depth_left  = dr.concat([z[:, 0:1],  z[:, :-1]], axis=1)
+    depth_right = dr.concat([z[:, 1:],   z[:, -1:]], axis=1)
+    depth_up    = dr.concat([z[0:1, :],  z[:-1, :]], axis=0)
+    depth_down  = dr.concat([z[1:, :],   z[-1:, :]], axis=0)
 
-    nx = ddx[...,1]*ddy[...,2] - ddx[...,2]*ddy[...,1]
-    ny = ddx[...,2]*ddy[...,0] - ddx[...,0]*ddy[...,2]
-    nz = ddx[...,0]*ddy[...,1] - ddx[...,1]*ddy[...,0]
+    cond_x = dr.abs(depth_left - z) < dr.abs(depth_right - z)
+    ddx = dr.select(cond_x[:, :, None], P - P_left, P_right - P)
 
-    #normalize
-    norm = dr.sqrt(nx*nx + ny*ny + nz*nz)
+    cond_y = dr.abs(depth_down - z) < dr.abs(depth_up - z)
+    ddy = dr.select(cond_y[:, :, None], P - P_down, P_up - P)
+
+    # Cross product ddx x ddy
+    nx = ddx[..., 1] * ddy[..., 2] - ddx[..., 2] * ddy[..., 1]
+    ny = ddx[..., 2] * ddy[..., 0] - ddx[..., 0] * ddy[..., 2]
+    nz = ddx[..., 0] * ddy[..., 1] - ddx[..., 1] * ddy[..., 0]
+
+    # Normalize
+    norm = dr.sqrt(nx * nx + ny * ny + nz * nz)
     norm = dr.maximum(norm, 1e-8)
-    nx = -nx/norm
-    ny = -ny/norm
-    nz = nz/norm
+    nx = -nx / norm
+    ny = -ny / norm
+    nz =  nz / norm
 
-    #rotation
+    # Rotate to world (constant w.r.t depth; does NOT break depth gradients)
     c2w = sensor.world_transform().matrix
     normal_x = nx * c2w[0, 0] + ny * c2w[0, 1] + nz * c2w[0, 2]
     normal_y = nx * c2w[1, 0] + ny * c2w[1, 1] + nz * c2w[1, 2]
     normal_z = nx * c2w[2, 0] + ny * c2w[2, 1] + nz * c2w[2, 2]
 
-    normal = dr.concat([normal_x[:,:,None],
-                        normal_y[:,:,None],
-                        normal_z[:,:,None]], axis=2)
+    normal = dr.concat([normal_x[:, :, None], normal_y[:, :, None], normal_z[:, :, None]], axis=2)  # (H,W,3)
 
+    # Apply mask (mask comes from Dr.Jit ops on depth_min, so graph is intact)
     normal = dr.select(mask, normal, dr.zeros_like(normal))
 
     return normal

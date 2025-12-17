@@ -2,10 +2,11 @@ print_stats: true
 
 densify:
   frequency: 20
-  start_iteration: 300
+  start_iteration: 0
   end_iteration: 1000
   clone_grad_threshold: 0.0002
   split_grad_threshold: 0.0002
+  split_extreme_shape_grad_threshold: 0.005
   relative_size_threshold: 0.01
   split_n_gaussians: 2
 
@@ -15,7 +16,7 @@ densify:
 
 prune:
   frequency: 20
-  start_iteration: 300
+  start_iteration: 0
   end_iteration: 1000
   prune_opacity_threshold: 0.05
   
@@ -33,6 +34,6 @@ reset_opacities:
 
 prune_scale:
   frequency: 20
-  start_iteration: 300
+  start_iteration: 0
   end_iteration: 1000
   prune_scale_threshold: 1.0
