@@ -15,7 +15,7 @@ from integrators import *
 from datasets import *
 from losses import *
 
-def load_scene_config(envmap_init_path):
+def load_scene_config(envmap_init_path, optimize_envmap):
     global OPTIMIZE_PARAMS
     scene_config = {
         'type': 'scene',
@@ -42,7 +42,7 @@ def load_scene_config(envmap_init_path):
         }
     }
 
-    if OPTIMIZE_ENVMAP:
+    if optimize_envmap:
         if SPHERICAL_GAUSSIAN:
             # register SG envmap
             SGModel(
@@ -103,14 +103,14 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
             mi.util.write_bitmap(join(envmap_dir, f'{idx:02d}' + ('.png')), rgb_bmp)
 
-def render_materials(dataset, scene_dict, integrator):
+def render_materials(dataset, scene_dict):
     albedo_list, ref_albedo_list = [], []
 
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Rendering views")
 
     for idx, sensor in pbar:
-        img, aovs = mi.render(scene_dict, sensor=sensor, spp=RENDER_SPP, integrator=integrator)
-        
+        img, aovs = mi.render(scene_dict, sensor=sensor, spp=RENDER_SPP)
+
         #aovs
         albedo_img = aovs['albedo'][:, :, :3]
         roughness_img = aovs['roughness'][:, :, :1]
@@ -157,19 +157,12 @@ if __name__ == "__main__":
     ellipsoidsfactory = EllipsoidsFactory()
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
 
-    scene_dict = load_scene_config(ENVMAP_INIT_PATH)
+    scene_config = load_scene_config(ENVMAP_INIT_PATH, OPTIMIZE_ENVMAP)
+    scene_dict = mi.load_dict(scene_config)
     params = mi.traverse(scene_dict)
 
-    aov_integrator = mi.load_dict({
-        'type': 'gsprim_prb',
-        'max_depth': 1,
-        'gaussian_max_depth': 128,
-        'hide_emitters': True,
-        'use_mis': False
-    })
-
     #---------------render materials-----------------
-    three_channel_ratio = render_materials(dataset, scene_dict, aov_integrator)
+    three_channel_ratio = render_materials(dataset, scene_dict)
 
     #---------------rescale albedo-----------------
     gaussians.rescale_albedo(three_channel_ratio)
@@ -179,4 +172,15 @@ if __name__ == "__main__":
 
     #---------------relight-----------------
     if RELIGHT:
+        gaussians = GaussianModel()
+        PLY_PATH = PLY_PATH.replace(".ply", "_rescaled.ply")
+        gaussians.restore_from_ply(PLY_PATH, False)
+
+        ellipsoidsfactory = EllipsoidsFactory()
+        gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
+
+        scene_config = load_scene_config(ENVMAP_INIT_PATH, False)
+        scene_dict = mi.load_dict(scene_config)
+        params = mi.traverse(scene_dict)
+
         render_relight_images(gaussians, dataset, scene_dict, params)

@@ -29,7 +29,8 @@ def load_scene_config():
             'pt_rate': SPP_PT_RATE,
             'gaussian_max_depth': 128,
             'hide_emitters': HIDE_EMITTER,
-            'use_mis': USE_MIS
+            'use_mis': USE_MIS,
+            'selfocc_offset_max': args.selfocc_offset_max
         },
         'shape': {
             'type': 'ellipsoidsmesh',

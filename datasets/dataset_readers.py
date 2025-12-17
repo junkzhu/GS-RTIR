@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image
 from utils import resize_img
 
-def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="box", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
+def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="gaussian", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
     #-------------------------SENSORS------------------------
     sensors = []
     sensors_normal = []
@@ -255,7 +255,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
 
     return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images
 
-def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="box", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
+def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="gaussian", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
     #-------------------------SENSORS------------------------
     sensors = []
     sensors_normal = []
@@ -497,7 +497,7 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
 
     return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images
 
-def read_Stanford_orb(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="box", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
+def read_Stanford_orb(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="gaussian", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
     #-------------------------SENSORS------------------------
     sensors = []
     sampler = mi.load_dict({'type': 'independent'})

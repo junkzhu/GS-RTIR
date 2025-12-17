@@ -4,8 +4,8 @@ import mitsuba as mi
 
 PI = dr.pi
 EPS = 1e-8
-CLOSE_THRESHOLD = 1e-3
-MID_THRESHOLD = 3e-3
+CLOSE_THRESHOLD = 0.0
+MID_THRESHOLD = 0.0
 
 class ReparamIntegrator(mi.SamplingIntegrator):
 
@@ -16,6 +16,11 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         self.gaussian_max_depth = props.get('gaussian_max_depth', 128)
         self.hide_emitters = props.get('hide_emitters', False)
         self.use_mis = props.get('use_mis', False)
+        self.selfocc_offset_max = props.get('selfocc_offset_max', -1)
+        
+        if self.selfocc_offset_max < 0:
+            self.selfocc_offset_max = float(1e8)
+
     
     def safe_normalize(self, v):
         n = dr.norm(v)
@@ -149,8 +154,9 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return ray, weight, pos_f, det
 
     @dr.syntax
-    def next_ray(self, scene, si, dir, active):
+    def next_ray(self, scene, si, dir, offset, active):
         ray = mi.Ray3f(si.spawn_ray(dir))
+        ray.o = ray.o + ray.d * offset
 
         active = mi.Mask(active)
         o, d = ray.o, ray.d
@@ -258,6 +264,43 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         density = dr.exp(-0.5 * (p.x**2 / scale.x**2 + p.y**2 / scale.y**2 + p.z**2 / scale.z**2))
 
         return 1.0 - dr.minimum(opacity * density, 0.9999)
+    
+    def eval_transmission_w_dist(self, si, ray, active):
+        """
+        Evaluate the transmission model on intersected volumetric primitives
+        """
+        def gather_ellipsoids_props(self, prim_index, active):
+            if self is not None and self.is_ellipsoids():
+                si = dr.zeros(mi.SurfaceInteraction3f)
+                si.prim_index = prim_index
+                data = self.eval_attribute_x("ellipsoid", si, active)
+                center  = mi.Point3f([data[i] for i in range(3)])
+                scale   = mi.Vector3f([data[i + 3] for i in range(3)])
+                quat    = mi.Quaternion4f([data[i + 6] for i in range(4)])
+                rot     = dr.quat_to_matrix(quat, size=3)
+                return center, scale, rot
+            else:
+                return mi.Point3f(0), mi.Vector3f(0), mi.Matrix3f(0)
+
+        center, scale, rot = dr.dispatch(si.shape, gather_ellipsoids_props, si.prim_index, active)
+
+        opacity = si.shape.eval_attribute_1("opacities", si, active)
+
+        # Gaussian splatting transmittance model
+        # Find the peak location along the ray, from "3D Gaussian Ray Tracing"
+        o = rot.T * (ray.o - center) / scale
+        d = rot.T * ray.d / scale
+        t_peak = -dr.dot(o, d) / dr.dot(d, d)
+        p_peak = ray(t_peak)
+
+        # Gaussian kernel evaluation
+        p = rot.T * (p_peak - center)
+        density = dr.exp(-0.5 * (p.x**2 / scale.x**2 + p.y**2 / scale.y**2 + p.z**2 / scale.z**2))
+
+        # Get influence distance
+        dist = dr.norm(p_peak - si.p) * 2 
+
+        return 1.0 - dr.minimum(opacity * density, 0.9999), dist
 
     def eval_normal(self, si, ray, active):
         def eval(shape, si, ray, active):
@@ -392,6 +435,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         ray = mi.Ray3f(dr.detach(ray)) #clone a new ray
 
+        seg_l, seg_r = mi.Float(0.0), mi.Float(0.0)
+
         A = mi.Spectrum(0.0 if primal else state_in['albedo'])
         R = mi.Spectrum(0.0 if primal else state_in['roughness'])
         M = mi.Spectrum(0.0 if primal else state_in['metallic'])
@@ -424,8 +469,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             weight = mi.Float(0.0)
             with dr.resume_grad(when=not primal):
                 normals_val, albedo_val, roughness_val, metallic_val = self.eval_bsdf_component(si_cur, ray, active)
-                transmission = self.eval_transmission(si_cur, ray, active)
-
+                transmission, dist = self.eval_transmission_w_dist(si_cur, ray, active)
+                
                 #valid_gs = dr.dot(ray.d, normals_val) < 0.0
                 #weight = dr.select(valid_gs, T * (1.0 - transmission), 0.0)
 
@@ -446,6 +491,11 @@ class ReparamIntegrator(mi.SamplingIntegrator):
                 normal = weight * normals_val
                 normal[~dr.isfinite(normal)] = 0.0
 
+            # The segment buffer
+            #seg_l[active] = dr.select(depth_acc > seg_r, depth_acc, seg_l)
+            seg_l[active] = dr.select(seg_l != 0 , depth_acc, seg_l)
+            seg_r[active] = dr.select(seg_r < (depth_acc + dist), depth_acc + dist, seg_r)
+            
             A[active] = (A + albedo) if primal else (A - albedo)
             R[active] = (R + roughness) if primal else (R - roughness)
             M[active] = (M + metallic) if primal else (M - metallic)
@@ -505,7 +555,10 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         rand = sampler.next_1d()
         active = (rand < (1-T))
 
-        return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, active , weight_acc
+        occ_offset = dr.select(D > seg_l, D - seg_l, 0.0)
+        occ_offset = dr.minimum(occ_offset, self.selfocc_offset_max)
+
+        return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, active , weight_acc, occ_offset
 
     #-------------------- BSDF --------------------
     def fresnel_schlick(self, F0, cosTheta):

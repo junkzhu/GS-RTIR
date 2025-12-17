@@ -15,6 +15,8 @@ def get_args():
     parser.add_argument("--ply_path", help="The path to the input .ply file.")
     parser.add_argument("--refine_path", help="The path to the refined output .ply file.")
 
+    parser.add_argument("--selfocc_offset_max", type=float, default=-1, help="The maximum self-occlusion offset.")
+
     #--------------render & metrics--------------
     parser.add_argument("--render_spp", type=int, default=128, help="The number of samples per pixel for rendering.")
     parser.add_argument("--relight", action="store_true", help="Whether to relight the scene.")

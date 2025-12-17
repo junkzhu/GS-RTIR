@@ -29,7 +29,9 @@ def readImages(renders_dir):
     for fname in natsorted(os.listdir(renders_dir)):
         if not fname.endswith(".png"):
             continue
-        base_name = fname.split("_")[0]
+        
+        name_no_ext = os.path.splitext(fname)[0]
+        base_name = name_no_ext.split("_")[0]
 
         if base_name not in image_names:
             image_names.append(base_name)
@@ -49,7 +51,7 @@ def readImages(renders_dir):
             img = srgb_to_linear(img)
             return img
 
-        renders["rgb"].append(read_img(os.path.join(renders_dir, f"{name}_rgb.png")))
+        renders["rgb"].append(read_img(os.path.join(renders_dir, f"{name}.png")))
         renders["albedo"].append(read_img(os.path.join(renders_dir, f"{name}_albedo.png")))
         renders["roughness"].append(read_img(os.path.join(renders_dir, f"{name}_roughness.png")))
         renders["normal"].append(read_img(os.path.join(renders_dir, f"{name}_normal.png")))
@@ -128,9 +130,6 @@ def metrics_training_envmap():
         ref_rgb       = dataset.ref_images[idx][sensor.film().crop_size()[0]]
         ref_albedo    = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
         ref_roughness = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]]
-        ref_normal    = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
-
-        normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
 
         psnr_rgb_val = lpsnr(ref_rgb, rgb_img)
         ssim_rgb_val = lssim(ref_rgb, rgb_img)
@@ -141,8 +140,7 @@ def metrics_training_envmap():
         lpips_alb_val = llpips(to_torch_image(ref_albedo), to_torch_image(albedo_img)).detach().item()
 
         l2_rough_val = l2(ref_roughness, roughness_img).numpy()
-        lmae_norm_val = lmae(ref_normal, normal_img, normal_mask.squeeze())
-
+       
         metrics["psnr_rgb"].append(psnr_rgb_val)
         metrics["ssim_rgb"].append(ssim_rgb_val)
         metrics["lpips_rgb"].append(lpips_rgb_val)
@@ -152,7 +150,12 @@ def metrics_training_envmap():
         metrics["lpips_albedo"].append(lpips_alb_val)
 
         metrics["l2_roughness"].append(l2_rough_val)
-        metrics["lmae_normal"].append(lmae_norm_val)
+        
+        if DATASET_TYPE == "TensoIR":
+            ref_normal    = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
+            normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
+            lmae_norm_val = lmae(ref_normal, normal_img, normal_mask.squeeze())
+            metrics["lmae_normal"].append(lmae_norm_val)
 
     print("\n=== Final Averages ===")
     print(f"PSNR (RGB):       {np.mean(metrics['psnr_rgb']):.3f}")
@@ -164,7 +167,9 @@ def metrics_training_envmap():
     print(f"LPIPS (Albedo):   {np.mean(metrics['lpips_albedo']):.3f}")
 
     print(f"L2 (Roughness):   {np.mean(metrics['l2_roughness']):.4f}")
-    print(f"LMAE (Normal):    {np.mean(metrics['lmae_normal']):.4f}")
+    
+    if DATASET_TYPE == "TensoIR":
+        print(f"LMAE (Normal):    {np.mean(metrics['lmae_normal']):.4f}")
 
     save_path = os.path.join(OUTPUT_RENDER_DIR, "results_metrics.json")
     np.savez(save_path, **metrics)
