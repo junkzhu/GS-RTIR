@@ -1,12 +1,12 @@
 optimizer:
   iterations: 500
   params:
-    centers_lr: 0.0001
-    scales_lr: 0.0001
-    quats_lr: 0.0001
-    normals_lr: 0.0001
+    centers_lr: 1e-6
+    scales_lr: 1e-6
+    quats_lr: 1e-6
+    normals_lr: 1e-5
 
-    opacities_lr: 0.001
+    opacities_lr: 1e-5
     albedos_lr: 0.01
     roughnesses_lr: 0.01
 
