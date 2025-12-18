@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
         for idx, sensor in dataset.get_sensor_iterator(i):
             img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
-                                  spp=8, spp_grad=1,
+                                  spp=REFINE_SPP, spp_grad=1,
                                   seed=seed, seed_grad=seed+1+len(dataset.sensors))
             
             seed += 1 + len(dataset.sensors)
@@ -134,7 +134,8 @@ if __name__ == "__main__":
             #aovs
             depth_img = aovs['depth'][:, :, :1]
             normal_img = aovs['normal'][:, :, :3]
-            normal_mask = np.any(normal_priors_img != 0, axis=2, keepdims=True)
+            normal_norm = np.linalg.norm(normal_img, axis=2, keepdims=True)
+            normal_mask = normal_norm > 0.5
             normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
             
             view_loss = l1(ref_img, img) / dataset.batch_size
@@ -151,8 +152,9 @@ if __name__ == "__main__":
 
             # encourage opacity to be 0 or 1
             opacity_loss = opacity_entropy_loss(opt['opacities'])
+            lamb_loss = opacity_lamb_loss(opt['opacities'])
 
-            total_loss = view_loss + 0.1 * normal_loss + normal_priors_loss + normal_tv_loss + fake_normal_loss + 0.1 * opacity_loss
+            total_loss = view_loss + normal_priors_loss + normal_tv_loss + fake_normal_loss + 1e-4 * lamb_loss #+ 0.1 * opacity_loss + 0.1 * normal_loss 
 
             dr.backward(total_loss)
             

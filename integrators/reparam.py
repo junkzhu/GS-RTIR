@@ -560,7 +560,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         occ_offset = dr.select(D > seg_l, D - seg_l, 0.0)
         occ_offset = dr.minimum(occ_offset, self.selfocc_offset_max)
 
-        return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, (T<0.99), active, weight_acc, occ_offset
+        return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, (weight_acc>0.5), active, weight_acc, occ_offset
 
     #-------------------- BSDF --------------------
     def fresnel_schlick(self, F0, cosTheta):

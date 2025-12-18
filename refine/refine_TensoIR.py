@@ -132,7 +132,8 @@ if __name__ == "__main__":
             #aovs
             depth_img = aovs['depth'][:, :, :1]
             normal_img = aovs['normal'][:, :, :3]
-            normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
+            normal_norm = np.linalg.norm(normal_img, axis=2, keepdims=True)
+            normal_mask = normal_norm > 0.5
             normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
             
             view_loss = l1(ref_img, img) / dataset.batch_size
@@ -149,8 +150,9 @@ if __name__ == "__main__":
 
             # encourage opacity to be 0 or 1
             opacity_loss = opacity_entropy_loss(opt['opacities'])
+            lamb_loss = opacity_lamb_loss(opt['opacities'])
 
-            total_loss = view_loss + normal_loss + fake_normal_loss + 0.1 * opacity_loss #+ normal_priors_loss + normal_loss + normal_tv_loss + 0.1 * opacity_loss
+            total_loss = view_loss + normal_loss + fake_normal_loss  + 1e-4 * lamb_loss#+ normal_priors_loss + normal_loss + normal_tv_loss + 0.1 * opacity_loss
 
             dr.backward(total_loss)
             
@@ -159,12 +161,14 @@ if __name__ == "__main__":
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
             rgb_ref_bmp = resize_img(mi.Bitmap(ref_img),dataset.target_res)
             depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
-            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img+1)/2, 0))), dataset.target_res) 
+            normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img+1)/2, 0))), dataset.target_res)
+            fake_normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (fake_normal_img+1)/2, 0))), dataset.target_res)
 
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}' + ('.png')), rgb_bmp)
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_ref' + ('.png')), rgb_ref_bmp)
             mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
-            mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
+            mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)
+            mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{i:04d}-{idx:02d}_fake_normal' + ('.png')), fake_normal_bmp)         
 
             rgb_psnr += lpsnr(ref_img, img) / dataset.batch_size
             normal_mae += lmae(ref_normal, normal_img, normal_mask.squeeze()) / dataset.batch_size
