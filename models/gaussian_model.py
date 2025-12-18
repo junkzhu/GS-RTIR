@@ -145,7 +145,7 @@ class GaussianModel:
         self._rotation = torch.roll(self._rotation, shifts=-1, dims=1)
         self._rotation = self._rotation / (torch.norm(self._rotation, dim=1, keepdim=True) + 1e-8)
         
-        self._normal = self._normal / (torch.norm(self._normal, dim=1, keepdim=True) + 1e-8)
+        #self._normal = self._normal / (torch.norm(self._normal, dim=1, keepdim=True) + 1e-8)
         #normal = [x * 2 - 1 for x in normal]
 
     def restore_from_ckpt(self, path, reset_attribute = False):
@@ -266,12 +266,13 @@ class GaussianModel:
         vertices['z'] = xyzs[:, 2].astype(np.float32)
 
         normals = self._normal.numpy() if isinstance(self._normal, torch.Tensor) else self._normal
-        normals = normals / (np.linalg.norm(normals, axis=1, keepdims=True) + 1e-8)
+        #normals = normals / (np.linalg.norm(normals, axis=1, keepdims=True) + 1e-8)
         vertices['nx'] = normals[:, 0].astype(np.float32)
         vertices['ny'] = normals[:, 1].astype(np.float32)
         vertices['nz'] = normals[:, 2].astype(np.float32)
 
         opacity = self._opacity.numpy() if isinstance(self._opacity, torch.Tensor) else self._opacity
+        opacity = np.log(opacity / (1.0 - opacity))
         vertices['opacity'] = opacity[:, 0].astype(np.float32)
 
         features_dc = self._features_dc.numpy() if isinstance(self._features_dc, torch.Tensor) else self._features_dc

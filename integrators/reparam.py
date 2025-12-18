@@ -496,9 +496,9 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             seg_l[active] = dr.select(seg_l != 0 , depth_acc, seg_l)
             seg_r[active] = dr.select(seg_r < (depth_acc + dist), depth_acc + dist, seg_r)
             
-            A[active] = (A + albedo) if primal else (A - albedo)
-            R[active] = (R + roughness) if primal else (R - roughness)
-            M[active] = (M + metallic) if primal else (M - metallic)
+            A[active] = (A + albedo) if primal else (A - albedo / weight_acc)
+            R[active] = (R + roughness) if primal else (R - roughness / weight_acc)
+            M[active] = (M + metallic) if primal else (M - metallic / weight_acc)
 
             D[active] = (D + depth) if primal else (D - depth / weight_acc)
             N[active] = (N + normal) if primal else (N - normal / weight_acc)
@@ -547,6 +547,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             #     rr_continue = sample_rr < rr_prob
             #     active &= ~rr_active | rr_continue
 
+        A = A / dr.maximum(weight_acc, 1e-8)
+        R = R / dr.maximum(weight_acc, 1e-8)
         D = D / dr.maximum(weight_acc, 1e-8)
         N = N / dr.maximum(weight_acc, 1e-8)
 
@@ -558,7 +560,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         occ_offset = dr.select(D > seg_l, D - seg_l, 0.0)
         occ_offset = dr.minimum(occ_offset, self.selfocc_offset_max)
 
-        return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, active , weight_acc, occ_offset
+        return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, (T<0.99), active, weight_acc, occ_offset
 
     #-------------------- BSDF --------------------
     def fresnel_schlick(self, F0, cosTheta):

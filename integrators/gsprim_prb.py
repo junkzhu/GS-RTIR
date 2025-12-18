@@ -180,7 +180,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             aov_D[~mask_pt] += D_wo_rt
 
         # ray tracing
-        A_cur_raw, R_cur_raw, M_cur_raw, D_cur_raw, N_cur_raw, si_valid, weight_acc, occ_offset = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
+        A_cur_raw, R_cur_raw, M_cur_raw, D_cur_raw, N_cur_raw, hit_valid, si_valid, weight_acc, occ_offset = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
         
         state_cur = {
             'albedo': dr.select(active, A_cur_raw, 0.0),
@@ -197,7 +197,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         N_cur = self.safe_normalize(N_cur_raw)
         D_cur = D_cur_raw
 
-        si_cur = self.SurfaceInteraction3f(ray_cur, D_cur, N_cur, si_valid)
+        si_cur = self.SurfaceInteraction3f(ray_cur, D_cur, N_cur, hit_valid)
         active &= si_cur.is_valid()
         
         valid_ray = active # output mask
@@ -285,7 +285,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             ray_next_valid = dr.dot(N_cur, ray_next.d) > 0.0
             active_next &= ray_next_valid
 
-            A_next_raw, R_next_raw, M_next_raw, D_next_raw, N_next_raw, si_next_valid, weight_acc_next, occ_offset_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
+            A_next_raw, R_next_raw, M_next_raw, D_next_raw, N_next_raw, hit_valid_next, si_next_valid, weight_acc_next, occ_offset_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
             
             state_next = {
                 'albedo': dr.select(active, A_next_raw, 0.0),

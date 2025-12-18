@@ -147,7 +147,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             aov_D[~mask_pt] += D_wo_rt
 
         # ray tracing
-        A_raw, R_raw, M_raw, D_raw, N_raw, active, weight_acc, occ_offset = self.ray_marching_loop(scene, sampler, True, ray, None, None, None, None, None, state_in, active)
+        A_raw, R_raw, M_raw, D_raw, N_raw, hit_valid, si_valid, weight_acc, occ_offset = self.ray_marching_loop(scene, sampler, True, ray, None, None, None, None, None, state_in, active)
 
         state_raw = {
             'albedo': dr.select(active, A_raw, 0.0),
@@ -168,7 +168,8 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             N = self.safe_normalize(N_raw)
             D = D_raw
 
-            si = self.SurfaceInteraction3f(ray, D, N, active)
+            si = self.SurfaceInteraction3f(ray, D, N, hit_valid)
+            active &= si.is_valid()
 
             #visualize the emitter
             if not self.hide_emitters:
