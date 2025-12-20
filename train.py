@@ -262,7 +262,7 @@ if __name__ == "__main__":
             # total loss
             total_loss = mi.TensorXf([0.0])
             if i < 64: # warm up
-                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 1e-4 * laplacian_loss + 0.1 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
+                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 1e-5 * laplacian_loss + 0.1 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
             else:
                 total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 0.05 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
 
