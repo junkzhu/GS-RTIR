@@ -11,9 +11,9 @@ optimizer:
     roughnesses_lr: 0.01
 
     envmap:
-      sg_lobe_lr: 0.01
-      sg_lambda_lr: 0.01
-      sg_mu_lr: 0.01
+      sg_lobe_lr: 0.02
+      sg_lambda_lr: 0.02
+      sg_mu_lr: 0.02
 
   scheduler:
     type: cosine

@@ -162,3 +162,14 @@ def ldiscrete_laplacian_reg_3dims(data, idx):
     laplacian = dr.squared_norm(c - neighbor_avg)
 
     return dr.sum(laplacian)
+
+def envmap_reg(opt, n_sg):
+    try:
+        L_reg = 0.0
+        for i in range(n_sg):
+            mu = opt[f'envmap.lgtSGsmu_{i}']
+            L_reg += dr.squared_norm(mu)
+        return L_reg
+    except KeyError:
+        # envmap optimization is disabled, opt has no SG params
+        return 0.0

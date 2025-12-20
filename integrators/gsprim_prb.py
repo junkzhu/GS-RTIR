@@ -180,7 +180,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             aov_D[~mask_pt] += D_wo_rt
 
         # ray tracing
-        A_cur_raw, R_cur_raw, M_cur_raw, D_cur_raw, N_cur_raw, hit_valid, si_valid, weight_acc, occ_offset = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
+        A_cur_raw, R_cur_raw, M_cur_raw, D_cur_raw, N_cur_raw, hit_valid, si_valid, weight_acc, ray_depth = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
         
         state_cur = {
             'albedo': dr.select(active, A_cur_raw, 0.0),
@@ -240,8 +240,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 em_ray = si_cur.spawn_ray(ds.d)
                 em_ray.d = dr.detach(em_ray.d)
 
-                cosθ = dr.maximum(dr.dot(-ray_cur.d, em_ray.d), 1e-8)
-                em_ray.o = dr.detach(em_ray.o) + occ_offset/cosθ * em_ray.d
+                cosα = dr.abs(dr.dot(ray_cur.d, N_cur))
+                cosθ = dr.maximum(dr.abs(dr.dot(N_cur, em_ray.d)), 1e-8)
+                occ_offset = dr.minimum((ray_depth*cosα/cosθ), self.selfocc_offset_max)
+                em_ray.o = dr.detach(em_ray.o) + occ_offset * em_ray.d
 
                 em_ray_valid = dr.dot(N_cur, em_ray.d) > 0.0
                 occluded = self.shadow_ray_test(scene, sampler, em_ray, active_em & em_ray_valid)
@@ -280,12 +282,14 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             # L += dr.select(first_vertex, 0.0, Lr_dir)
                  
             # Intersect next surface
-            cosθ = dr.maximum(dr.dot(-ray_cur.d, bsdf_dir), 1e-8)
-            ray_next = self.next_ray(scene, si_cur, bsdf_dir, occ_offset/cosθ, active_next) # set offset to avoid self-occ
+            cosα = dr.abs(dr.dot(ray_cur.d, N_cur))
+            cosθ = dr.maximum(dr.abs(dr.dot(N_cur, bsdf_dir)), 1e-8)
+            occ_offset = dr.minimum((ray_depth*cosα/cosθ), self.selfocc_offset_max)
+            ray_next = self.next_ray(scene, si_cur, bsdf_dir, occ_offset, active_next) # set offset to avoid self-occ
             ray_next_valid = dr.dot(N_cur, ray_next.d) > 0.0
             active_next &= ray_next_valid
 
-            A_next_raw, R_next_raw, M_next_raw, D_next_raw, N_next_raw, hit_valid_next, si_next_valid, weight_acc_next, occ_offset_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
+            A_next_raw, R_next_raw, M_next_raw, D_next_raw, N_next_raw, hit_valid_next, si_next_valid, weight_acc_next, ray_depth_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
             
             state_next = {
                 'albedo': dr.select(active, A_next_raw, 0.0),
@@ -393,7 +397,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             active_next &= dr.any((β != 0.0))
 
             # Set config for next iteration
-            occ_offset = dr.detach(occ_offset_next)
+            ray_depth = dr.detach(ray_depth_next)
             state_cur = dr.detach(state_next)
             active_prev = mi.Bool(active)
             active = mi.Bool(active_next)

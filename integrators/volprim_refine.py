@@ -215,7 +215,7 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
         A = mi.math.srgb_to_linear(A)
 
-        return A, D, N, (weight_acc>0.5), weight_acc
+        return A, D, N, (weight_acc>self.geometry_threshold), weight_acc
 
     @dr.syntax
     def sample(self, mode, scene, sampler, ray, δL, δA, δD, δN, state_in, active, **kwargs):

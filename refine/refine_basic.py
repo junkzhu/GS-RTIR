@@ -20,10 +20,10 @@ from datasets import *
 from losses import *
 
 if __name__ == "__main__":
-    dataset = Dataset(DATASET_PATH, REFINE_UPSAMPLE_ITER)
+    dataset = Dataset(args.dataset_path, REFINE_UPSAMPLE_ITER)
 
     gaussians = GaussianModel()
-    gaussians.restore_from_ply(PLY_PATH, RESET_ATTRIBUTE)
+    gaussians.restore_from_ply(args.ply_path, args.reset_attribute)
 
     ellipsoidsfactory = EllipsoidsFactory()
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
     psnr_list = []
 
-    pbar = tqdm.tqdm(range(REFINE_NITER))
+    pbar = tqdm.tqdm(range(args.refine_niter))
     for i in pbar:
         loss = mi.Float(0.0)
         rgb_psnr = mi.Float(0.0)
@@ -117,4 +117,4 @@ if __name__ == "__main__":
 
     #save ply
     gaussians.restore_from_params(params)
-    gaussians.save_ply(REFINE_PATH)
+    gaussians.save_ply(args.refine_path)

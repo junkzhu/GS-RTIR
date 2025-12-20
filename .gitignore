@@ -12,3 +12,5 @@ outputs
 
 emitter/output
 emitter/SGEmitter.py
+
+*.out

@@ -102,7 +102,7 @@ def to_torch_image(img):
     return img_torch
 
 def metrics_training_envmap():
-    dataset = Dataset(DATASET_PATH, RENDER_UPSAMPLE_ITER, "test")
+    dataset = Dataset(args.dataset_path, RENDER_UPSAMPLE_ITER, "test")
 
     renders = readImages(OUTPUT_RENDER_DIR)
 
@@ -151,11 +151,21 @@ def metrics_training_envmap():
 
         metrics["l2_roughness"].append(l2_rough_val)
         
-        if DATASET_TYPE == "TensoIR":
+        if args.dataset_type == "TensoIR":
             ref_normal    = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
             normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
             lmae_norm_val = lmae(ref_normal, normal_img, normal_mask.squeeze())
             metrics["lmae_normal"].append(lmae_norm_val)
+
+    metrics["psnr_rgb_mean"] = float(np.mean(metrics['psnr_rgb']))
+    metrics["ssim_rgb_mean"] = float(np.mean(metrics['ssim_rgb']))
+    metrics["lpips_rgb_mean"] = float(np.mean(metrics['lpips_rgb']))
+
+    metrics["psnr_albedo_mean"] = float(np.mean(metrics['psnr_albedo']))
+    metrics["ssim_albedo_mean"] = float(np.mean(metrics['ssim_albedo']))
+    metrics["lpips_albedo_mean"] = float(np.mean(metrics['lpips_albedo']))
+
+    metrics["l2_roughness_mean"] = float(np.mean(metrics['l2_roughness']))
 
     print("\n=== Final Averages ===")
     print(f"PSNR (RGB):       {np.mean(metrics['psnr_rgb']):.3f}")
@@ -168,7 +178,8 @@ def metrics_training_envmap():
 
     print(f"L2 (Roughness):   {np.mean(metrics['l2_roughness']):.4f}")
     
-    if DATASET_TYPE == "TensoIR":
+    if args.dataset_type == "TensoIR":
+        metrics["lmae_normal_mean"] = float(np.mean(metrics['lmae_normal']))
         print(f"LMAE (Normal):    {np.mean(metrics['lmae_normal']):.4f}")
 
     save_path = os.path.join(OUTPUT_RENDER_DIR, "results_metrics.json")
@@ -176,7 +187,7 @@ def metrics_training_envmap():
     print(f"[INFO] Metrics saved to {save_path}")
 
 def metrics_relighting_envmap(envmap_name):
-    dataset = Dataset(DATASET_PATH, RENDER_UPSAMPLE_ITER, env=envmap_name)
+    dataset = Dataset(args.dataset_path, RENDER_UPSAMPLE_ITER, env=envmap_name)
 
     current_env_images_path = os.path.join(OUTPUT_RENDER_DIR, f'./relight/{envmap_name}')
     renders = read_RGB_images(current_env_images_path)
@@ -218,7 +229,7 @@ if __name__ == "__main__":
     
     metrics_training_envmap()
 
-    if DATASET_TYPE == "TensoIR":
-        envmap_name_list = get_relighting_envmap_names(ENVMAP_ROOT)
+    if args.dataset_type == "TensoIR":
+        envmap_name_list = get_relighting_envmap_names(args.envmap_root)
         for envmap_name in envmap_name_list:
             metrics_relighting_envmap(envmap_name)

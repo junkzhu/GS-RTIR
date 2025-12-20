@@ -24,13 +24,14 @@ def load_scene_config():
     scene_config = {
         'type': 'scene',
         'integrator': {
-            'type': INTEGRATOR,
-            'max_depth': MAX_BOUNCE_NUM,
-            'pt_rate': SPP_PT_RATE,
+            'type': args.integrator_type,
+            'max_depth': args.max_bounce_num,
+            'pt_rate': args.spp_pt_rate,
             'gaussian_max_depth': 128,
-            'hide_emitters': HIDE_EMITTER,
-            'use_mis': USE_MIS,
-            'selfocc_offset_max': args.selfocc_offset_max
+            'hide_emitters': args.hide_emitter,
+            'use_mis': args.use_mis,
+            'selfocc_offset_max': args.selfocc_offset_max,
+            'geometry_threshold': args.geometry_threshold
         },
         'shape': {
             'type': 'ellipsoidsmesh',
@@ -47,11 +48,11 @@ def load_scene_config():
         }
     }
 
-    if OPTIMIZE_ENVMAP:
-        if SPHERICAL_GAUSSIAN:
+    if args.envmap_optimization:
+        if args.spherical_gaussian:
             # register SG envmap
             SGModel(
-                num_sgs = NUM_SGS,
+                num_sgs = args.num_sgs,
                 #sg_init = np.load("output/final_optimized_sgs.npy")
             )
             
@@ -77,7 +78,7 @@ def load_scene_config():
         scene_config['emitter'] = {
             'type': 'envmap',
             'id': 'EnvironmentMapEmitter',
-            'filename': ENVMAP_PATH,
+            'filename': args.envmap_path,
             'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
                         mi.ScalarTransform4f.rotate([1, 0, 0], 90)
         }
@@ -112,16 +113,16 @@ def register_optimizer(params, train_conf):
     }
 
     # register envmap parameters
-    if OPTIMIZE_ENVMAP:
+    if args.envmap_optimization:
         opt['envmap.position'] = params['envmap.position']
         opt['envmap.weight'] = params['envmap.weight']
         opt['envmap.std'] = params['envmap.std']
-        for i in range(NUM_SGS):
+        for i in range(args.num_sgs):
             opt[f'envmap.lgtSGslobe_{i}']   = params[f'envmap.lgtSGslobe_{i}']
             opt[f'envmap.lgtSGslambda_{i}'] = params[f'envmap.lgtSGslambda_{i}']
             opt[f'envmap.lgtSGsmu_{i}']     = params[f'envmap.lgtSGsmu_{i}']
 
-        for i in range(NUM_SGS):
+        for i in range(args.num_sgs):
             lr_dict[f'envmap.lgtSGslobe_{i}']   = train_conf.optimizer.params.envmap.sg_lobe_lr
             lr_dict[f'envmap.lgtSGslambda_{i}'] = train_conf.optimizer.params.envmap.sg_lambda_lr
             lr_dict[f'envmap.lgtSGsmu_{i}']     = train_conf.optimizer.params.envmap.sg_mu_lr
@@ -145,11 +146,11 @@ def update_params(opt, params):
     params['shape.albedos'] = opt['albedos']
     params['shape.roughnesses'] = opt['roughnesses']
     
-    if OPTIMIZE_ENVMAP:
+    if args.envmap_optimization:
         params['envmap.position'] = opt['envmap.position']
         params['envmap.weight'] = opt['envmap.weight']
         params['envmap.std'] = opt['envmap.std']
-        for i in range(NUM_SGS):
+        for i in range(args.num_sgs):
             params[f'envmap.lgtSGslobe_{i}']   = opt[f'envmap.lgtSGslobe_{i}']
             params[f'envmap.lgtSGslambda_{i}'] = opt[f'envmap.lgtSGslambda_{i}']
             params[f'envmap.lgtSGsmu_{i}']     = opt[f'envmap.lgtSGsmu_{i}']
@@ -157,16 +158,16 @@ def update_params(opt, params):
     params.update()
 
 if __name__ == "__main__":
-    train_conf = OmegaConf.load('configs/train.yaml')
-    dataset = Dataset(DATASET_PATH)
+    train_conf = OmegaConf.load('configs/train.yaml')    
+    dataset = Dataset(args.dataset_path)
 
     gaussians = GaussianModel()
-    if PLY_PATH.endswith(".ply"):
-        gaussians.restore_from_ply(PLY_PATH, RESET_ATTRIBUTE)
-    elif PLY_PATH.endswith(".pt"):
-        gaussians.restore_from_ckpt(PLY_PATH)
+    if args.ply_path.endswith(".ply"):
+        gaussians.restore_from_ply(args.ply_path, args.reset_attribute)
+    elif args.ply_path.endswith(".pt"):
+        gaussians.restore_from_ckpt(args.ply_path)
     else:
-        raise ValueError(f"Unsupported file type: {PLY_PATH}")
+        raise ValueError(f"Unsupported file type: {args.ply_path}")
 
     # cKDTree: find the nearest k gaussians
     KD_Tree = cKDTree(gaussians._xyz)
@@ -178,7 +179,7 @@ if __name__ == "__main__":
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
 
     # original envmap
-    envmap = mi.Bitmap(ENVMAP_PATH)
+    envmap = mi.Bitmap(args.envmap_path)
     envmap = np.array(envmap)
     mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'ref' + ('.png')), envmap)
 
@@ -210,9 +211,9 @@ if __name__ == "__main__":
         
         gsstrategy.lr_schedule(opt, i, train_conf.optimizer.iterations, train_conf.optimizer.scheduler.min_factor)
 
-        for idx, sensor in dataset.get_sensor_iterator(i):
+        for idx, sensor in dataset.get_sensor_iterator():
             img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
-                                  spp=SPP * PRIMAL_SPP_MULT, spp_grad=SPP,
+                                  spp=args.training_spp * args.primal_spp_mult, spp_grad=args.training_spp,
                                   seed=seed, seed_grad=seed + 1 + len(dataset.sensors))
             
             seed += 1 + len(dataset.sensors)
@@ -231,7 +232,7 @@ if __name__ == "__main__":
             normal_img = aovs['normal'][:, :, :3]
             
             normal_norm = np.linalg.norm(normal_img, axis=2, keepdims=True)
-            normal_mask = normal_norm > 0.5
+            normal_mask = normal_norm > 0.1
             normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
 
             view_loss = l1(img, ref_img) / dataset.batch_size
@@ -261,9 +262,9 @@ if __name__ == "__main__":
             # total loss
             total_loss = mi.TensorXf([0.0])
             if i < 64: # warm up
-                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 1e-4 * laplacian_loss + 0.1 * priors_loss
+                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 1e-4 * laplacian_loss + 0.1 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
             else:
-                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 0.05 * priors_loss
+                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 0.05 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
 
             dr.backward(total_loss)
 
@@ -288,7 +289,7 @@ if __name__ == "__main__":
 
             rgb_psnr += lpsnr(ref_img, img) / dataset.batch_size
 
-            if DATASET_TYPE == "TensoIR":
+            if args.dataset_type == "TensoIR":
                 ref_albedo = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
                 ref_roughness = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]]
                 ref_normal = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
@@ -300,7 +301,7 @@ if __name__ == "__main__":
         loss_list.append(np.asarray(total_loss))
         rgb_PSNR_list.append(np.asarray(rgb_psnr))
 
-        if DATASET_TYPE == "TensoIR":
+        if args.dataset_type == "TensoIR":
             normal_MAE_list.append(np.asarray(normal_mae))
             albedo_PSNR_list.append(np.asarray(albedo_psnr))
             roughness_MSE_list.append(np.asarray(roughness_mse))
@@ -314,19 +315,19 @@ if __name__ == "__main__":
         loss_str = f'Loss: {loss_np[0]:.4f}'
         pbar.set_description(loss_str)
 
-        if DATASET_TYPE == "TensoIR":
+        if args.dataset_type == "TensoIR":
             pbar.set_postfix({'rgb': rgb_psnr, 'albedo': albedo_psnr, 'roughness': roughness_mse, 'normal': normal_mae})
         else:
             pbar.set_postfix({'rgb': rgb_psnr})
 
 
         # save envmap
-        if OPTIMIZE_ENVMAP:
-            if SPHERICAL_GAUSSIAN:
-                envmap_img = render_envmap_bitmap(params=params, num_sgs=NUM_SGS)
+        if args.envmap_optimization:
+            if args.spherical_gaussian:
+                envmap_img = render_envmap_bitmap(params=params, num_sgs=args.num_sgs)
                 mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
                 if (i in SAVE_ENVMAP_ITER) or i == train_conf.optimizer.iterations - 1:
-                    save_sg_envmap(params, NUM_SGS, i)
+                    save_sg_envmap(params, args.num_sgs, i)
             else:
                 envmap_data = params['envmap.data']
                 envmap_img = mi.Bitmap(envmap_data)

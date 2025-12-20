@@ -16,7 +16,12 @@ class Dataset:
         env='sunset'
     ) -> None:
         
-        self.batch_size = BATCH_SIZE
+        self.batch_size = args.batch_size
+        
+        self.shuffle = args.shuffle
+        self.sensor_perm = None
+        self.sensor_ptr = 0
+
         self.render_upsample_iter = list(render_upsampler_iters)
 
         self.sensors = {}
@@ -33,17 +38,17 @@ class Dataset:
 
         self.target_res = [800,800]
 
-        if DATASET_TYPE == 'COLMAP':
+        if args.dataset_type == 'COLMAP':
             assert(1==2) #TODO COLMAP
-        elif DATASET_TYPE == 'TensoIR':
+        elif args.dataset_type == 'TensoIR':
             self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["TensoIR"](
                 source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env=env
             )
-        elif DATASET_TYPE == 'Synthetic4Relight':
+        elif args.dataset_type == 'Synthetic4Relight':
             self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["Synthetic4Relight"](
                 source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env=env
             )
-        elif DATASET_TYPE == 'Stanford_orb':
+        elif args.dataset_type == 'Stanford_orb':
             assert(1==2)
         else:
             assert False, "Could not recognize scene type!"
@@ -53,16 +58,25 @@ class Dataset:
         for sensor in self.sensors:
             set_sensor_res(sensor, self.init_res)
 
-    def get_sensor_iterator(self, i):
-        n_sensors = len(self.sensors)
-        if self.batch_size and (self.batch_size < n_sensors):
-            # Access sensors in a strided way, assuming that this will maximize angular coverage per iteration
-            steps = int(np.ceil(n_sensors / self.batch_size))
-            indices = [(j * steps + i % steps) % n_sensors for j in range(self.batch_size)]
-            sensors = [self.sensors[idx] for idx in indices]
-            return zip(indices, sensors)
+    def _reset_epoch(self):
+        n = len(self.sensors)
+        if self.shuffle:
+            self.sensor_perm = np.random.permutation(n)
         else:
-            return enumerate(self.sensors)
+            self.sensor_perm = np.arange(n)
+        self.sensor_ptr = 0
+
+    def get_sensor_iterator(self):
+        if self.sensor_perm is None or self.sensor_ptr >= len(self.sensors):
+            self._reset_epoch()
+
+        indices = self.sensor_perm[self.sensor_ptr : self.sensor_ptr + self.batch_size]
+
+        self.sensor_ptr += len(indices)
+
+        sensors = [self.sensors[idx] for idx in indices]
+
+        return zip(indices, sensors)
         
     def update_sensors(self, i):
         if self.render_upsample_iter is not None and i in self.render_upsample_iter:

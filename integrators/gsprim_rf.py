@@ -147,7 +147,7 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
             aov_D[~mask_pt] += D_wo_rt
 
         # ray tracing
-        A_raw, R_raw, M_raw, D_raw, N_raw, hit_valid, si_valid, weight_acc, occ_offset = self.ray_marching_loop(scene, sampler, True, ray, None, None, None, None, None, state_in, active)
+        A_raw, R_raw, M_raw, D_raw, N_raw, hit_valid, si_valid, weight_acc, ray_depth = self.ray_marching_loop(scene, sampler, True, ray, None, None, None, None, None, state_in, active)
 
         state_raw = {
             'albedo': dr.select(active, A_raw, 0.0),
@@ -184,8 +184,10 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 
             shadow_ray = si.spawn_ray_to(ds.p)
             shadow_ray.d = dr.detach(shadow_ray.d)
-            cosθ = dr.maximum(dr.dot(-ray.d, shadow_ray.d), 1e-8)
-            shadow_ray.o = dr.detach(shadow_ray.o) + occ_offset/cosθ * shadow_ray.d
+            cosα = dr.abs(dr.dot(ray.d, N))
+            cosθ = dr.maximum(dr.abs(dr.dot(N, shadow_ray.d)), 1e-8)
+            occ_offset = dr.minimum((ray_depth*cosα/cosθ), self.selfocc_offset_max)
+            shadow_ray.o = dr.detach(shadow_ray.o) + occ_offset * shadow_ray.d
             shadow_ray_valid = dr.dot(N, shadow_ray.d) > 0.0
             occluded = self.shadow_ray_test(scene, sampler, shadow_ray, active_e & shadow_ray_valid)
 
@@ -238,8 +240,10 @@ class GaussianPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
 
                 shadow_ray = si.spawn_ray(bs_dir)
                 shadow_ray.d = dr.detach(shadow_ray.d)
-                cosθ = dr.maximum(dr.dot(-ray.d, shadow_ray.d), 1e-8)
-                shadow_ray.o = dr.detach(shadow_ray.o) + occ_offset/cosθ * shadow_ray.d
+                cosα = dr.abs(dr.dot(ray.d, N))
+                cosθ = dr.maximum(dr.abs(dr.dot(N, shadow_ray.d)), 1e-8)
+                occ_offset = dr.minimum((ray_depth*cosα/cosθ), self.selfocc_offset_max)
+                shadow_ray.o = dr.detach(shadow_ray.o) + occ_offset * shadow_ray.d
                 shadow_ray_valid = dr.dot(N, shadow_ray.d) > 0.0
                 occluded = self.shadow_ray_test(scene, sampler, shadow_ray, active_bsdf & shadow_ray_valid)
                 visibility = dr.select(~occluded, 1.0, 0.0)

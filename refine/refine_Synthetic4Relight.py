@@ -24,15 +24,15 @@ opacities_scale = 2.0
 
 if __name__ == "__main__":
     refine_conf = OmegaConf.load('configs/refine.yaml')
-    dataset = Dataset(DATASET_PATH, REFINE_UPSAMPLE_ITER)
+    dataset = Dataset(args.dataset_path, REFINE_UPSAMPLE_ITER)
 
     gaussians = GaussianModel()
-    if PLY_PATH.endswith(".ply"):
-        gaussians.restore_from_ply(PLY_PATH, RESET_ATTRIBUTE)
-    elif PLY_PATH.endswith(".pt"):
-        gaussians.restore_from_ckpt(PLY_PATH)
+    if args.ply_path.endswith(".ply"):
+        gaussians.restore_from_ply(args.ply_path, args.reset_attribute)
+    elif args.ply_path.endswith(".pt"):
+        gaussians.restore_from_ckpt(args.ply_path)
     else:
-        raise ValueError(f"Unsupported file type: {PLY_PATH}")
+        raise ValueError(f"Unsupported file type: {args.ply_path}")
 
     gsstrategy = GSStrategyModel('configs/gs.yaml')
     gsstrategy.sensors_normal = dataset.sensors_normal
@@ -45,7 +45,8 @@ if __name__ == "__main__":
         'type': 'scene',
         'integrator': {
             'type': 'volprim_refine',
-            'max_depth': 128
+            'max_depth': 128,
+            'geometry_threshold': args.geometry_threshold
         },
         'shape': {
             'type': 'ellipsoidsmesh',
@@ -122,7 +123,7 @@ if __name__ == "__main__":
 
         for idx, sensor in dataset.get_sensor_iterator(i):
             img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
-                                  spp=REFINE_SPP, spp_grad=1,
+                                  spp=args.refine_spp, spp_grad=1,
                                   seed=seed, seed_grad=seed+1+len(dataset.sensors))
             
             seed += 1 + len(dataset.sensors)
@@ -135,7 +136,7 @@ if __name__ == "__main__":
             depth_img = aovs['depth'][:, :, :1]
             normal_img = aovs['normal'][:, :, :3]
             normal_norm = np.linalg.norm(normal_img, axis=2, keepdims=True)
-            normal_mask = normal_norm > 0.5
+            normal_mask = normal_norm > 0.1
             normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
             
             view_loss = l1(ref_img, img) / dataset.batch_size
@@ -208,11 +209,11 @@ if __name__ == "__main__":
 
         if (i > 0) and (i % 50 == 0): 
             gaussians.restore_from_params(params)
-            gaussians.save_ply(REFINE_PATH)
+            gaussians.save_ply(args.refine_path)
 
     plot_loss(psnr_list, label='PSNR', output_file=join(OUTPUT_REFINE_DIR, 'psnr.png'))
     plot_loss(mae_list, label='MAE', output_file=join(OUTPUT_REFINE_DIR, 'mae.png'))
 
     #save ply
     gaussians.restore_from_params(params)
-    gaussians.save_ply(REFINE_PATH)
+    gaussians.save_ply(args.refine_path)

@@ -20,12 +20,12 @@ def load_scene_config(envmap_init_path, optimize_envmap):
     scene_config = {
         'type': 'scene',
         'integrator': {
-            'type': INTEGRATOR,
-            'max_depth': MAX_BOUNCE_NUM,
-            'pt_rate': SPP_PT_RATE,
+            'type': args.integrator_type,
+            'max_depth': args.max_bounce_num,
+            'pt_rate': args.spp_pt_rate,
             'gaussian_max_depth': 128,
-            'hide_emitters': HIDE_EMITTER,
-            'use_mis': USE_MIS
+            'hide_emitters': args.hide_emitter,
+            'use_mis': args.use_mis
         },
         'shape': {
             'type': 'ellipsoidsmesh',
@@ -43,10 +43,10 @@ def load_scene_config(envmap_init_path, optimize_envmap):
     }
 
     if optimize_envmap:
-        if SPHERICAL_GAUSSIAN:
+        if args.spherical_gaussian:
             # register SG envmap
             SGModel(
-                num_sgs = NUM_SGS,
+                num_sgs = args.num_sgs,
                 sg_init = np.load(envmap_init_path)
             )
             
@@ -72,7 +72,7 @@ def load_scene_config(envmap_init_path, optimize_envmap):
         scene_config['emitter'] = {
             'type': 'envmap',
             'id': 'EnvironmentMapEmitter',
-            'filename': ENVMAP_PATH,
+            'filename': args.envmap_path,
             'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
                         mi.ScalarTransform4f.rotate([1, 0, 0], 90)
         }
@@ -85,7 +85,7 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
     params['shape.albedos'] = dr.ravel(gaussians_attributes['albedos'])
 
-    envmaps = load_hdr_paths(ENVMAP_ROOT)
+    envmaps = load_hdr_paths(args.envmap_root)
     
     for envmap in envmaps:
         #create folder
@@ -99,7 +99,7 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
 
         relight_pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc=f"Relighting {envmap_name}")
         for idx, sensor in relight_pbar:
-            img, _ = mi.render(scene_dict, params=params, sensor=sensor, spp=RENDER_SPP)
+            img, _ = mi.render(scene_dict, params=params, sensor=sensor, spp=args.render_spp)
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
             mi.util.write_bitmap(join(envmap_dir, f'{idx:02d}' + ('.png')), rgb_bmp)
 
@@ -109,7 +109,7 @@ def render_materials(dataset, scene_dict):
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Rendering views")
 
     for idx, sensor in pbar:
-        img, aovs = mi.render(scene_dict, sensor=sensor, spp=RENDER_SPP)
+        img, aovs = mi.render(scene_dict, sensor=sensor, spp=args.render_spp)
 
         #aovs
         albedo_img = aovs['albedo'][:, :, :3]
@@ -124,8 +124,13 @@ def render_materials(dataset, scene_dict):
         #metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
         normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img+1)/2, 0))), dataset.target_res) 
 
-        #mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)
+        
+        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)
+        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo_ref' + ('.png')), dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]])
+
         mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_roughness' + ('.png')), roughness_bmp)
+        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_roughness_ref' + ('.png')), dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]])
+
         #mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_metallic' + ('.png')), metallic_bmp)
         mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_normal' + ('.png')), normal_bmp)
 
@@ -134,6 +139,7 @@ def render_materials(dataset, scene_dict):
 
         rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
         mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}' + ('.png')), rgb_bmp)
+        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_ref' + ('.png')), dataset.ref_images[idx][sensor.film().crop_size()[0]])
 
     single_channel_ratio, three_channel_ratio = compute_rescale_ratio(ref_albedo_list, albedo_list)
     print("Albedo scale:", three_channel_ratio)
@@ -149,15 +155,15 @@ def render_materials(dataset, scene_dict):
 
 if __name__ == "__main__":
 
-    dataset = Dataset(DATASET_PATH, RENDER_UPSAMPLE_ITER, "test")
+    dataset = Dataset(args.dataset_path, RENDER_UPSAMPLE_ITER, "test")
 
     gaussians = GaussianModel()
-    gaussians.restore_from_ply(PLY_PATH, False)
+    gaussians.restore_from_ply(args.ply_path, False)
 
     ellipsoidsfactory = EllipsoidsFactory()
     gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
 
-    scene_config = load_scene_config(ENVMAP_INIT_PATH, OPTIMIZE_ENVMAP)
+    scene_config = load_scene_config(args.envmap_init_path, args.envmap_optimization)
     scene_dict = mi.load_dict(scene_config)
     params = mi.traverse(scene_dict)
 
@@ -167,19 +173,19 @@ if __name__ == "__main__":
     #---------------rescale albedo-----------------
     gaussians.rescale_albedo(three_channel_ratio)
 
-    save_path = PLY_PATH.replace('.ply', '_rescaled.ply')
+    save_path = args.ply_path.replace('.ply', '_rescaled.ply')
     gaussians.save_ply(save_path)
 
     #---------------relight-----------------
-    if RELIGHT:
+    if args.relight:
         gaussians = GaussianModel()
-        PLY_PATH = PLY_PATH.replace(".ply", "_rescaled.ply")
-        gaussians.restore_from_ply(PLY_PATH, False)
+        args.ply_path = args.ply_path.replace(".ply", "_rescaled.ply")
+        gaussians.restore_from_ply(args.ply_path, False)
 
         ellipsoidsfactory = EllipsoidsFactory()
         gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
 
-        scene_config = load_scene_config(ENVMAP_INIT_PATH, False)
+        scene_config = load_scene_config(args.envmap_init_path, False)
         scene_dict = mi.load_dict(scene_config)
         params = mi.traverse(scene_dict)
 
