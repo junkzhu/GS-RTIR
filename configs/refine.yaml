@@ -1,5 +1,5 @@
 optimizer:
-  iterations: 150
+  iterations: 300
   params:
     centers_lr: 0.0002
     scales_lr: 0.0002
