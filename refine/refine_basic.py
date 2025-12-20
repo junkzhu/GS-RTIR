@@ -73,8 +73,7 @@ if __name__ == "__main__":
         loss = mi.Float(0.0)
         rgb_psnr = mi.Float(0.0)
         
-        for idx, sensor in dataset.get_sensor_iterator(i):
-            
+        for idx, sensor in dataset.get_sensor_iterator():
             
             img = mi.render(scene_dict, sensor=sensor, params=params, 
                                   spp=32, spp_grad=1,

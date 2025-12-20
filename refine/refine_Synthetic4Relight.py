@@ -121,7 +121,7 @@ if __name__ == "__main__":
         
         gsstrategy.lr_schedule(opt, i, refine_conf.optimizer.iterations, refine_conf.optimizer.scheduler.min_factor)
 
-        for idx, sensor in dataset.get_sensor_iterator(i):
+        for idx, sensor in dataset.get_sensor_iterator():
             img, aovs = mi.render(scene_dict, sensor=sensor, params=params, 
                                   spp=args.refine_spp, spp_grad=1,
                                   seed=seed, seed_grad=seed+1+len(dataset.sensors))
