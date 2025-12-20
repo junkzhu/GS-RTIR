@@ -4,7 +4,7 @@
 CUDA_VISIBLE_DEVICES=1 python refine/refine_TensoIR.py --dataset_type TensoIR --dataset_name lego --dataset_path /home/zjk/datasets/TensoIR/lego --ply_path /home/zjk/datasets/TensoIR/3dgrt/lego.pt --refine_path /home/zjk/datasets/TensoIR/3dgrt/lego_refined.ply
 CUDA_VISIBLE_DEVICES=1 python refine/refine_TensoIR.py --dataset_type TensoIR --dataset_name hotdog --dataset_path /home/zjk/datasets/TensoIR/hotdog --ply_path /home/zjk/datasets/TensoIR/3dgrt/hotdog.pt --refine_path /home/zjk/datasets/TensoIR/3dgrt/hotdog_refined.ply
 CUDA_VISIBLE_DEVICES=1 python refine/refine_TensoIR.py --dataset_type TensoIR --dataset_name armadillo --dataset_path /home/zjk/datasets/TensoIR/armadillo --ply_path /home/zjk/datasets/TensoIR/3dgrt/armadillo.pt --refine_path /home/zjk/datasets/TensoIR/3dgrt/armadillo_refined.ply
-CUDA_VISIBLE_DEVICES=1 python refine/refine_TensoIR.py --dataset_type TensoIR --dataset_name ficus --dataset_path /home/zjk/datasets/TensoIR/ficus --ply_path /home/zjk/datasets/TensoIR/3dgrt/ficus.pt --refine_path /home/zjk/datasets/TensoIR/3dgrt/ficus_refined.ply --geometry_threshold 0.25
+CUDA_VISIBLE_DEVICES=1 python refine/refine_TensoIR.py --dataset_type TensoIR --dataset_name ficus --dataset_path /home/zjk/datasets/TensoIR/ficus --ply_path /home/zjk/datasets/TensoIR/3dgrt/ficus.pt --refine_path /home/zjk/datasets/TensoIR/3dgrt/ficus_refined.ply
 
 #train
 CUDA_VISIBLE_DEVICES=1 python train.py --dataset_type TensoIR --dataset_name lego --dataset_path /home/zjk/datasets/TensoIR/lego --ply_path /home/zjk/datasets/TensoIR/3dgrt/lego_refined.ply --selfocc_offset_max 0.1

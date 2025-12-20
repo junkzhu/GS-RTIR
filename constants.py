@@ -31,7 +31,7 @@ def get_args():
     
     #-------------- integrator config --------------
     parser.add_argument("--integrator_type", default='gsprim_prb', help="The type of integrator.")
-    parser.add_argument("--geometry_threshold", type=float, default=0.5, help="The geometry threshold.")
+    parser.add_argument("--geometry_threshold", type=float, default=0.3, help="The geometry threshold.")
 
     parser.add_argument("--selfocc_offset_max", type=float, default=0.1, help="The maximum self-occlusion offset.")
     parser.add_argument("--use_mis", type=str2bool, default=True, help="Enable MIS.")
