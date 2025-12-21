@@ -31,7 +31,8 @@ def load_scene_config():
             'hide_emitters': args.hide_emitter,
             'use_mis': args.use_mis,
             'selfocc_offset_max': args.selfocc_offset_max,
-            'geometry_threshold': args.geometry_threshold
+            'geometry_threshold': args.geometry_threshold,
+            'separate_direct_indirect': args.separate_direct_indirect,
         },
         'shape': {
             'type': 'ellipsoidsmesh',
@@ -287,6 +288,16 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 
+            if args.separate_direct_indirect:
+                direct_light_img = aovs['direct_light'][:, :, :3]
+                indirect_light_img = aovs['indirect_light'][:, :, :3]
+
+                direct_light_bmp = resize_img(mi.Bitmap(direct_light_img),dataset.target_res)
+                indirect_light_bmp = resize_img(mi.Bitmap(indirect_light_img),dataset.target_res)
+                
+                mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_direct_light' + ('.png')), direct_light_bmp)
+                mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_indirect_light' + ('.png')), indirect_light_bmp)
+            
             rgb_psnr += lpsnr(ref_img, img) / dataset.batch_size
 
             if args.dataset_type == "TensoIR":

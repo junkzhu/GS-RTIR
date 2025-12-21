@@ -25,7 +25,10 @@ def load_scene_config(envmap_init_path, optimize_envmap):
             'pt_rate': args.spp_pt_rate,
             'gaussian_max_depth': 128,
             'hide_emitters': args.hide_emitter,
-            'use_mis': args.use_mis
+            'use_mis': args.use_mis,
+            'selfocc_offset_max': args.selfocc_offset_max,
+            'geometry_threshold': args.geometry_threshold,
+            'separate_direct_indirect': args.separate_direct_indirect,
         },
         'shape': {
             'type': 'ellipsoidsmesh',
@@ -133,6 +136,16 @@ def render_materials(dataset, scene_dict):
 
         #mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_metallic' + ('.png')), metallic_bmp)
         mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_normal' + ('.png')), normal_bmp)
+
+        if args.separate_direct_indirect:
+            direct_light_img = aovs['direct_light'][:, :, :3]
+            indirect_light_img = aovs['indirect_light'][:, :, :3]
+
+            direct_light_bmp = resize_img(mi.Bitmap(direct_light_img),dataset.target_res)
+            indirect_light_bmp = resize_img(mi.Bitmap(indirect_light_img),dataset.target_res)
+
+            mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_direct_light' + ('.png')), direct_light_bmp)
+            mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_indirect_light' + ('.png')), indirect_light_bmp)
 
         albedo_list.append(albedo_bmp)
         ref_albedo_list.append(dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]])

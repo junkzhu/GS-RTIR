@@ -18,6 +18,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         self.use_mis = props.get('use_mis', False)
         self.selfocc_offset_max = props.get('selfocc_offset_max', -1)
         self.geometry_threshold = props.get('geometry_threshold', 0.5)
+        self.separate_direct_indirect = props.get('separate_direct_indirect', False)
         
         if self.selfocc_offset_max < 0:
             self.selfocc_offset_max = float(1e8)

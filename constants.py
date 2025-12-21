@@ -40,6 +40,8 @@ def get_args():
     parser.add_argument("--training_spp", type=int, default=16, help="The number of samples per pixel for training.")
     parser.add_argument("--primal_spp_mult", type=int, default=4, help="The multiplier for primal samples per pixel.")
     parser.add_argument("--spp_pt_rate", type=float, default=1.0, help="The rate of ray tracing point samples per pixel.")
+
+    parser.add_argument("--separate_direct_indirect", type=str2bool, default=False, help="Separate output direct and indirect illumination.")
     
     #-------------- refine config --------------
     parser.add_argument("--refine_spp", type=int, default=4, help="The number of samples per pixel for refining.")

@@ -153,6 +153,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         δL = mi.Spectrum(δL if δL is not None else 0)
 
         aov_A, aov_R, aov_M, aov_D, aov_N = mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0)
+        L_direct, L_indirect = mi.Spectrum(0.0), mi.Spectrum(0.0)
 
         β = mi.Spectrum(1)
         mis_em = mi.Float(1)
@@ -272,14 +273,12 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             L_prev = L 
 
             L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
-                
-            # render direct illumination
-            # L += dr.select((depth == 1), Le, 0.0)
-            # L += dr.select(first_vertex, Lr_dir, 0.0)
 
-            # # render indirect illumination
-            # L += dr.select((depth == 1), 0.0, Le)
-            # L += dr.select(first_vertex, 0.0, Lr_dir)
+            if self.separate_direct_indirect:
+                # render direct illumination
+                L_direct = dr.select((depth == 1), Le, 0.0) + dr.select(first_vertex, Lr_dir, 0.0)
+                # render indirect illumination
+                L_indirect = dr.select((depth == 1), 0.0, Le) + dr.select(first_vertex, 0.0, Lr_dir)
                  
             # Intersect next surface
             cosα = dr.abs(dr.dot(ray_cur.d, N_cur))
@@ -408,6 +407,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
         result[mask_pt] += dr.select(valid_ray, mi.Spectrum(L), 0.0)
         aovs['result'] = result
+        
+        if self.separate_direct_indirect:
+            aovs['direct_light'] = dr.select(valid_ray, mi.Spectrum(L_direct), 0.0)
+            aovs['indirect_light'] = dr.select(valid_ray, mi.Spectrum(L_indirect), 0.0)
 
         gradients = {}
         
