@@ -69,7 +69,7 @@ def SG_energy(lgtSGs):
     return energy
 
 
-def SG2Envmap(lgtSGs, H, W, upper_hemi=False, viewdirs=None, fixed_lobe=False):
+def SG2Envmap(envmap_base_color, lgtSGs, H, W, upper_hemi=False, viewdirs=None, fixed_lobe=False):
     if viewdirs is None:
         if upper_hemi:
             phi, theta = torch.meshgrid(
@@ -98,9 +98,11 @@ def SG2Envmap(lgtSGs, H, W, upper_hemi=False, viewdirs=None, fixed_lobe=False):
     lgtSGLambdas = lgtSGLambdas.abs()
     lgtSGMus = lgtSGMus.abs()
     lgt_w = torch.exp(
-        lgtSGLambdas * (torch.sum(viewdirs * lgtSGLobes, dim=-1, keepdim=True) - 1.0)
+        torch.exp(lgtSGLambdas) * (torch.sum(viewdirs * lgtSGLobes, dim=-1, keepdim=True) - 1.0)
     )
-    rgb = torch.bmm(lgtSGMus.T[None].repeat(len(lgt_w), 1, 1), lgt_w)
+    rgb = torch.bmm(lgtSGMus.T[None].repeat(len(lgt_w), 1, 1), lgt_w) #[131072, 3]
+
+    rgb += envmap_base_color[None, :]
     envmap = rgb.reshape((H, W, 3))
     return envmap
 

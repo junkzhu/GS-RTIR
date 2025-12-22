@@ -54,6 +54,7 @@ def load_scene_config():
             # register SG envmap
             SGModel(
                 num_sgs = args.num_sgs,
+                base_color_init = np.array([0.5, 0.5, 0.5]),
                 #sg_init = np.load("output/final_optimized_sgs.npy")
             )
             
@@ -63,7 +64,7 @@ def load_scene_config():
                 'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
                             mi.ScalarTransform4f.rotate([1, 0, 0], 90)
             }
-            OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
+            OPTIMIZE_PARAMS += ['envmap.lgtSGs*'] + ['envmap.base_color']
             OPTIMIZE_PARAMS += ['envmap.position'] + ['envmap.weight'] + ['envmap.std']
         
         else:
@@ -115,6 +116,7 @@ def register_optimizer(params, train_conf):
 
     # register envmap parameters
     if args.envmap_optimization:
+        opt['envmap.base_color'] = params['envmap.base_color']
         opt['envmap.position'] = params['envmap.position']
         opt['envmap.weight'] = params['envmap.weight']
         opt['envmap.std'] = params['envmap.std']
@@ -123,6 +125,7 @@ def register_optimizer(params, train_conf):
             opt[f'envmap.lgtSGslambda_{i}'] = params[f'envmap.lgtSGslambda_{i}']
             opt[f'envmap.lgtSGsmu_{i}']     = params[f'envmap.lgtSGsmu_{i}']
 
+        lr_dict['envmap.base_color'] = train_conf.optimizer.params.envmap.base_color_lr
         for i in range(args.num_sgs):
             lr_dict[f'envmap.lgtSGslobe_{i}']   = train_conf.optimizer.params.envmap.sg_lobe_lr
             lr_dict[f'envmap.lgtSGslambda_{i}'] = train_conf.optimizer.params.envmap.sg_lambda_lr
@@ -148,6 +151,7 @@ def update_params(opt, params):
     params['shape.roughnesses'] = opt['roughnesses']
     
     if args.envmap_optimization:
+        params['envmap.base_color'] = opt['envmap.base_color']
         params['envmap.position'] = opt['envmap.position']
         params['envmap.weight'] = opt['envmap.weight']
         params['envmap.std'] = opt['envmap.std']
@@ -263,9 +267,9 @@ if __name__ == "__main__":
             # total loss
             total_loss = mi.TensorXf([0.0])
             if i < 64: # warm up
-                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 1e-5 * laplacian_loss + 0.1 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
+                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.01 * tv_loss + 1e-5 * laplacian_loss + 0.1 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
             else:
-                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.1 * tv_loss + 0.05 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
+                total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.01 * tv_loss + 0.05 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
 
             dr.backward(total_loss)
 
@@ -288,7 +292,7 @@ if __name__ == "__main__":
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
             mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)            
 
-            if args.separate_direct_indirect:
+            if args.separate_direct_indirect and 'direct_light' in aovs and 'indirect_light' in aovs:
                 direct_light_img = aovs['direct_light'][:, :, :3]
                 indirect_light_img = aovs['indirect_light'][:, :, :3]
 
@@ -347,9 +351,11 @@ if __name__ == "__main__":
         if (i in dataset.render_upsample_iter) or i == train_conf.optimizer.iterations - 1:
             plot_loss(loss_list, label='Total Loss', output_file=join(OUTPUT_DIR, 'total_loss.png'))
             plot_loss(rgb_PSNR_list, label = "RGB PSNR", output_file=join(OUTPUT_DIR, 'rgb_psnr.png'))
-            plot_loss(albedo_PSNR_list, label='Albedo PSNR', output_file=join(OUTPUT_DIR, 'albedo_psnr.png'))
-            plot_loss(roughness_MSE_list, label='Roughness MSE', output_file=join(OUTPUT_DIR, 'roughness_mse.png'))
-            plot_loss(normal_MAE_list, label='Normal MAE', output_file=join(OUTPUT_DIR, 'normal_mae.png'))
+            
+            if args.dataset_type == "TensoIR":
+                plot_loss(albedo_PSNR_list, label='Albedo PSNR', output_file=join(OUTPUT_DIR, 'albedo_psnr.png'))
+                plot_loss(roughness_MSE_list, label='Roughness MSE', output_file=join(OUTPUT_DIR, 'roughness_mse.png'))
+                plot_loss(normal_MAE_list, label='Normal MAE', output_file=join(OUTPUT_DIR, 'normal_mae.png'))
 
             gaussians.restore_from_params(params)
             save_path = f"{OUTPUT_PLY_DIR}/iter_{i:03d}.ply"

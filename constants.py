@@ -22,7 +22,7 @@ def get_args():
     parser.add_argument("--dataset_name", help="The name of the scene.")
     parser.add_argument("--dataset_path", help="The path to the dataset directory.")
     
-    parser.add_argument("--batch_size", type=int, default=1, help="The batch size.")
+    parser.add_argument("--batch_size", type=int, default=4, help="The batch size.")
     parser.add_argument("--shuffle", type=str2bool, default=True, help="Shuffle the dataset.")
     
     #-------------- optimization config --------------
@@ -33,7 +33,7 @@ def get_args():
     parser.add_argument("--integrator_type", default='gsprim_prb', help="The type of integrator.")
     parser.add_argument("--geometry_threshold", type=float, default=0.3, help="The geometry threshold.")
 
-    parser.add_argument("--selfocc_offset_max", type=float, default=0.1, help="The maximum self-occlusion offset.")
+    parser.add_argument("--selfocc_offset_max", type=float, default=0.5, help="The maximum self-occlusion offset.")
     parser.add_argument("--use_mis", type=str2bool, default=True, help="Enable MIS.")
     parser.add_argument("--max_bounce_num", type=int, default=4, help="The maximum number of bounces.")
     
@@ -41,7 +41,7 @@ def get_args():
     parser.add_argument("--primal_spp_mult", type=int, default=4, help="The multiplier for primal samples per pixel.")
     parser.add_argument("--spp_pt_rate", type=float, default=1.0, help="The rate of ray tracing point samples per pixel.")
 
-    parser.add_argument("--separate_direct_indirect", type=str2bool, default=False, help="Separate output direct and indirect illumination.")
+    parser.add_argument("--separate_direct_indirect", type=str2bool, default=True, help="Separate output direct and indirect illumination.")
     
     #-------------- refine config --------------
     parser.add_argument("--refine_spp", type=int, default=4, help="The number of samples per pixel for refining.")

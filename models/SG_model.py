@@ -7,11 +7,11 @@ class SGModel:
     """
     Performs inverse rendering to optimize SG parameters using Mitsuba's AD framework.
     """
-    def __init__(self, num_sgs=16, sg_init=None):    
+    def __init__(self, num_sgs=16, base_color_init=[0.5, 0.5, 0.5], sg_init=None):    
 
         with open('emitter/SGEmitter.tmp.py', 'r') as f:
             template = Template(f.read())
-            rendered_code = template.render(num_sgs=num_sgs, sg_init=sg_init)
+            rendered_code = template.render(num_sgs=num_sgs, base_color_init=base_color_init, sg_init=sg_init)
             with open('emitter/SGEmitter.py', 'w') as f:
                 f.write(rendered_code)
 

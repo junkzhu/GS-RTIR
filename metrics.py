@@ -131,6 +131,13 @@ def metrics_training_envmap():
         ref_albedo    = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
         ref_roughness = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]]
 
+        #TODO: temporarily use a mask to exclude the black pixels
+        mask = (ref_rgb != 0)
+        rgb_img       = dr.select(mask, rgb_img, 0.0)
+        albedo_img    = dr.select(mask, albedo_img, 0.0)
+        roughness_img = dr.select(mask, roughness_img, 0.0)
+        normal_img    = dr.select(mask, normal_img, 0.0)
+
         psnr_rgb_val = lpsnr(ref_rgb, rgb_img)
         ssim_rgb_val = lssim(ref_rgb, rgb_img)
         lpips_rgb_val = llpips(to_torch_image(ref_rgb), to_torch_image(rgb_img)).detach().item()

@@ -11,10 +11,11 @@ optimizer:
     roughnesses_lr: 0.02
 
     envmap:
+      base_color_lr: 0.02
       sg_lobe_lr: 0.02
       sg_lambda_lr: 0.02
       sg_mu_lr: 0.02
 
   scheduler:
     type: cosine
-    min_factor: 0.1
+    min_factor: 0.5
