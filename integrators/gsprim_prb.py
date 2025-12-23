@@ -246,12 +246,12 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 em_ray = si_cur.spawn_ray(ds.d)
                 em_ray.d = dr.detach(em_ray.d)
 
-                cosα = dr.abs(dr.dot(ray_cur.d, N_cur))
-                cosθ = dr.maximum(dr.abs(dr.dot(N_cur, em_ray.d)), 1e-8)
+                cosα = dr.abs(dr.dot(ray_cur.d, dr.detach(N_cur)))
+                cosθ = dr.maximum(dr.abs(dr.dot(dr.detach(N_cur), em_ray.d)), 1e-8)
                 occ_offset = dr.minimum((ray_depth*cosα/cosθ), self.selfocc_offset_max)
                 em_ray.o = dr.detach(em_ray.o) + occ_offset * em_ray.d
 
-                em_ray_valid = dr.dot(N_cur, em_ray.d) > 0.0
+                em_ray_valid = dr.dot(dr.detach(N_cur), em_ray.d) > 0.0
                 occluded = self.shadow_ray_test(scene, sampler, em_ray, active_em & em_ray_valid)
 
                 visibility = dr.select(~occluded, 1.0, 0.0)

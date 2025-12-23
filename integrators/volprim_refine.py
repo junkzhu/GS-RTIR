@@ -157,15 +157,16 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 transmission = self.eval_transmission(si_cur, ray, active)
 
                 weight = T * (1.0 - transmission)
+                weight_det = dr.detach(weight)
 
-                color = weight * sh_color
+                color = weight_det * sh_color
                 color[~dr.isfinite(color)] = 0.0
+
+                normal[active] = weight_det * normals_val
+                normal[~dr.isfinite(normal)] = 0.0
 
                 depth[active] = weight * depth_acc
                 depth[~dr.isfinite(depth)] = 0.0
-
-                normal[active] = weight * normals_val
-                normal[~dr.isfinite(normal)] = 0.0
 
             A[active] = (A + color) if primal else (A - color)
 

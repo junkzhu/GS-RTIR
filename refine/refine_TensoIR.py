@@ -138,6 +138,7 @@ if __name__ == "__main__":
             normal_mask_flat = np.reshape(normal_mask, (-1,1)).squeeze()
             
             view_loss = l1(ref_img, img) / dataset.batch_size
+            normal_l2_loss = l2(ref_normal, normal_img) / dataset.batch_size
 
             # normal priors
             normal_priors_loss = l2(normal_priors_img, normal_img) / dataset.batch_size
@@ -153,7 +154,7 @@ if __name__ == "__main__":
             opacity_loss = opacity_entropy_loss(opt['opacities'])
             lamb_loss = opacity_lamb_loss(opt['opacities'])
 
-            total_loss = view_loss + normal_loss + fake_normal_loss  + 1e-4 * lamb_loss#+ normal_priors_loss + normal_loss + normal_tv_loss + 0.1 * opacity_loss
+            total_loss = view_loss + normal_l2_loss #+ normal_loss + fake_normal_loss  + 1e-4 * lamb_loss#+ normal_priors_loss + normal_loss + normal_tv_loss + 0.1 * opacity_loss
 
             dr.backward(total_loss)
             

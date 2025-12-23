@@ -477,21 +477,22 @@ class ReparamIntegrator(mi.SamplingIntegrator):
                 #weight = dr.select(valid_gs, T * (1.0 - transmission), 0.0)
 
                 weight = T * (1.0 - transmission)
+                weight_det = dr.detach(weight)
 
-                albedo = weight * albedo_val
+                albedo = weight_det * albedo_val
                 albedo[~dr.isfinite(albedo)] = 0.0
 
-                roughness = weight * roughness_val
+                roughness = weight_det * roughness_val
                 roughness[~dr.isfinite(roughness)] = 0.0
 
-                metallic = weight * metallic_val
+                metallic = weight_det * metallic_val
                 metallic[~dr.isfinite(metallic)] = 0.0
+
+                normal = weight_det * normals_val
+                normal[~dr.isfinite(normal)] = 0.0
 
                 depth = weight * depth_acc
                 depth[~dr.isfinite(depth)] = 0.0
-
-                normal = weight * normals_val
-                normal[~dr.isfinite(normal)] = 0.0
 
             # The segment buffer
             #seg_l[active] = dr.select(depth_acc > seg_r, depth_acc, seg_l)
