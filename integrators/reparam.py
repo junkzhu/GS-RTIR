@@ -554,14 +554,21 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         D = D / dr.maximum(weight_acc, 1e-8)
         N = N / dr.maximum(weight_acc, 1e-8)
 
-        #R = mi.math.srgb_to_linear(R) #TODO: 属性中存储的roughness如果是srgb空间的，优化中更容易收敛
+        # Trick: srgb -> linear is much easier to optimize, follow 3dgs
+        R = mi.math.srgb_to_linear(R) 
+        A = mi.math.srgb_to_linear(A)
 
+        # ray active
         rand = sampler.next_1d()
-        active = (rand < (1-T))
+        ray_active = (rand < T)
+
+        # hit active
+        segment_len = seg_r - seg_l
+        hit_active = (weight_acc > self.geometry_threshold)
 
         ray_depth = dr.select(D > seg_l, D - seg_l, 0.0)
 
-        return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, (weight_acc>self.geometry_threshold), active, weight_acc, ray_depth
+        return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, hit_active, ray_active, weight_acc, ray_depth
 
     #-------------------- BSDF --------------------
     def fresnel_schlick(self, F0, cosTheta):

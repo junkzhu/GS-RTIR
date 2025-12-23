@@ -140,7 +140,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         
         primal = (mode == dr.ADMode.Primal)
         
-        valid_ray = (not self.hide_emitters) and scene.environment() is not None
+        valid_ray = (not self.hide_emitters) and scene.environment() is not None #TODO: hide_emitters not work in prb
 
         # --------------------- Configure loop state ----------------------
         mask_pt = mi.Mask(active)
@@ -181,8 +181,8 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             aov_D[~mask_pt] += D_wo_rt
 
         # ray tracing
-        A_cur_raw, R_cur_raw, M_cur_raw, D_cur_raw, N_cur_raw, hit_valid, si_valid, weight_acc, ray_depth = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
-        
+        A_cur_raw, R_cur_raw, M_cur_raw, D_cur_raw, N_cur_raw, hit_valid, ray_valid, weight_acc, ray_depth = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
+
         state_cur = {
             'albedo': dr.select(active, A_cur_raw, 0.0),
             'roughness': dr.select(active, R_cur_raw, 0.0),
@@ -201,7 +201,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         si_cur = self.SurfaceInteraction3f(ray_cur, D_cur, N_cur, hit_valid)
         active &= si_cur.is_valid()
         
-        valid_ray = active # output mask
+        valid_ray |= active # output mask
         
         #aov & state_outs
         aov_A[mask_pt] += dr.select(active, A_cur, 0.0)
@@ -228,8 +228,13 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     dr.enable_grad(A_cur, R_cur, M_cur, D_cur, N_cur)
                     dr.disable_grad(si_prev)
             
-            with dr.resume_grad(when=not primal):      
-                Le = β * mis_em * si_cur.emitter(scene).eval(si_cur)
+            with dr.resume_grad(when=not primal):  
+                si_e = dr.zeros(mi.SurfaceInteraction3f)
+                si_e.wi = -ray_cur.d
+                emitter_val = dr.select(ray_valid, scene.environment().eval(si_e), 0.0)
+                Le = dr.select(first_vertex, 0.0, β * mis_em * emitter_val)
+                
+                #Le = dr.select(si_cur.is_valid(), β * mis_em * si_cur.emitter(scene).eval(si_cur), 0.0)
            
             active_next &= (depth + 1 < self.max_depth) & si_cur.is_valid()
             # Next event estimation
@@ -288,7 +293,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             ray_next_valid = dr.dot(N_cur, ray_next.d) > 0.0
             active_next &= ray_next_valid
 
-            A_next_raw, R_next_raw, M_next_raw, D_next_raw, N_next_raw, hit_valid_next, si_next_valid, weight_acc_next, ray_depth_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
+            A_next_raw, R_next_raw, M_next_raw, D_next_raw, N_next_raw, hit_valid_next, ray_next_valid, weight_acc_next, ray_depth_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
             
             state_next = {
                 'albedo': dr.select(active, A_next_raw, 0.0),
@@ -305,7 +310,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             N_next = self.safe_normalize(N_next_raw)
             D_next = D_next_raw
             
-            si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, si_next_valid)
+            si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, hit_valid_next)
 
             # Compute MIS weight for the next vertex
             ds = mi.DirectionSample3f(scene, si=si_next, ref=si_cur)
@@ -396,6 +401,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             active_next &= dr.any((β != 0.0))
 
             # Set config for next iteration
+            ray_valid = dr.detach(ray_next_valid)
             ray_depth = dr.detach(ray_depth_next)
             state_cur = dr.detach(state_next)
             active_prev = mi.Bool(active)
