@@ -19,6 +19,7 @@ class Dataset:
         self.batch_size = args.batch_size
         
         self.shuffle = args.shuffle
+        self.rng = np.random.RandomState(42)
         self.sensor_perm = None
         self.sensor_ptr = 0
 
@@ -61,7 +62,7 @@ class Dataset:
     def _reset_epoch(self):
         n = len(self.sensors)
         if self.shuffle:
-            self.sensor_perm = np.random.permutation(n)
+            self.sensor_perm = self.rng.permutation(n)
         else:
             self.sensor_perm = np.arange(n)
         self.sensor_ptr = 0
