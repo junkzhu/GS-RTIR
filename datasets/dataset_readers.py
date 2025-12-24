@@ -427,7 +427,7 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
     if split == 'test':
         albedo_paths = [path.replace('_rgba.png', '_albedo.png') for path in image_paths]  
         for idx, fn in enumerate(albedo_paths):
-            bmp = load_bitmap(fn, False)
+            bmp = load_bitmap(fn, bsrgb2linear=True)
             d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
             new_res = bmp.size()
             while np.min(new_res) > 4:

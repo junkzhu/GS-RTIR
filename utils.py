@@ -250,6 +250,9 @@ def compute_rescale_ratio(gt_albedo_list, albedo_list):
     single_channel_ratio = (gt_all / albedo_all.clamp(min=1e-6))[..., 0].median()
     three_channel_ratio, _ = (gt_all / albedo_all.clamp(min=1e-6)).median(dim=0)
 
+    if (three_channel_ratio < 0.1).any():
+        three_channel_ratio = [(gt_all/albedo_all.clamp_min(1e-6))[..., 0].median().item()] * 3 # follow IRGS
+
     return mi.TensorXf(single_channel_ratio), mi.TensorXf(three_channel_ratio)
 
 def load_hdr_paths(root_dir):
