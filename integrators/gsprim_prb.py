@@ -222,6 +222,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         while dr.hint(active, max_iterations=self.max_depth, label="Path Replay Backpropagation (%s)" % mode.name):
             first_vertex = mi.Bool(depth == 0)
             active_next = mi.Bool(active)
+            mis_direct = 0.0
             
             if not primal:
                 with dr.resume_grad():
@@ -376,9 +377,9 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     δA_cur, δR_cur, δM_cur, δD_cur, δN_cur = map(dr.grad, (A_cur, R_cur, M_cur, D_cur, N_cur))
                     
                 # Small trick: convert spectrum gradient to float, then multiply by δL
-                δR_cur = δL * dr.sum(δR_cur/δL)
-                δM_cur = δL * dr.sum(δM_cur/δL)
-                δD_cur = δL * dr.sum(δD_cur/δL)
+                δR_cur = δL * dr.sum(δR_cur/δL) / mis_direct
+                δM_cur = δL * dr.sum(δM_cur/δL) / mis_direct
+                δD_cur = δL * dr.sum(δD_cur/δL) / mis_direct
 
                 δA_in = dr.select(first_vertex, δA_cur + δA, δA_cur) # ∂loss/∂RGB * ∂RGB/∂A + ∂loss/∂A = ∂loss/∂A
                 δR_in = dr.select(first_vertex, δR_cur + δR, δR_cur)
