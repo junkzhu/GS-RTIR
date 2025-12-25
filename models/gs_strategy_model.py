@@ -168,7 +168,7 @@ class GSStrategyModel:
 
     def densify_gaussians(self):
         self.clone_gaussians(self.grad_norm, self.conf.densify.clone_grad_threshold, self.conf.densify.relative_size_threshold)
-        self.split_gaussians(self.grad_norm, self.conf.densify.split_grad_threshold, self.conf.densify.split_n_gaussians, self.conf.densify.relative_size_threshold)
+        #self.split_gaussians(self.grad_norm, self.conf.densify.split_grad_threshold, self.conf.densify.split_n_gaussians, self.conf.densify.relative_size_threshold)
         #self.split_extreme_shape_gaussian(self.grad_norm, self.conf.densify.split_extreme_shape_grad_threshold, self.conf.densify.anisotropy_threshold, self.conf.densify.size_min, self.conf.densify.size_max)
 
     #Density-pruned
@@ -205,7 +205,7 @@ class GSStrategyModel:
         self.quats = torch.cat([self.quats, self.quats[mask]])
         self.opacities = torch.cat([self.opacities, self.opacities[mask]])
         self.sh_coeffs = torch.cat([self.sh_coeffs, self.sh_coeffs[mask]])
-        self.normals = torch.cat([self.normals, self.normals[mask]])
+        self.normals = torch.cat([self.normals, torch.zeros_like(self.normals[mask])])
         self.grad_norm = torch.cat([self.grad_norm, self.grad_norm[mask]])
 
         self.update_num_gaussian()

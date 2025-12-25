@@ -318,7 +318,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         def eval(shape, si, ray, active):
             if shape is not None and shape.is_ellipsoids():
                 normals = shape.eval_attribute_3("normals", si, active)
-                normals = dr.normalize(mi.Vector3f(normals))
+                normals = mi.Vector3f(normals)
 
                 albedos = shape.eval_attribute_3("albedos", si, active)
                 albedos = dr.maximum(albedos, 0.0)

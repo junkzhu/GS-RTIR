@@ -147,15 +147,15 @@ if __name__ == "__main__":
             # convert depth to fake_normal
             fake_normal_img = convert_depth_to_normal(depth_img, sensor)
             normal_loss = lnormal_sqr(fake_normal_img, normal_img, normal_mask_flat) / dataset.batch_size
-            normal_tv_loss = TV(ref_img, normal_img) / dataset.batch_size
+            normal_tv_loss = TV(normal_priors_img, normal_img) / dataset.batch_size
 
-            fake_normal_loss = lnormal_sqr(normal_priors_img, fake_normal_img, normal_mask_flat) / dataset.batch_size
+            fake_normal_loss = lnormal_sqr(fake_normal_img, normal_img, normal_mask_flat) / dataset.batch_size
 
             # encourage opacity to be 0 or 1
             opacity_loss = opacity_entropy_loss(opt['opacities'])
             lamb_loss = opacity_lamb_loss(opt['opacities'])
 
-            total_loss = view_loss + normal_priors_loss + normal_tv_loss + fake_normal_loss + 1e-4 * lamb_loss #+ 0.1 * opacity_loss + 0.1 * normal_loss 
+            total_loss = view_loss + normal_priors_loss + normal_tv_loss + fake_normal_loss #+ 1e-4 * lamb_loss + 0.1 * opacity_loss + 0.1 * normal_loss 
 
             dr.backward(total_loss)
             
