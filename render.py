@@ -66,7 +66,7 @@ def load_scene_config(envmap_init_path, optimize_envmap):
         else:
             scene_config['envmap'] = {
                 'type': 'envmap',
-                'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/init_1280_640.exr',
+                'filename': '/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
                 'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
                             mi.ScalarTransform4f.rotate([1, 0, 0], 90)
             }

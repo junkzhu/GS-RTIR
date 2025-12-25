@@ -3,6 +3,7 @@
 import os
 import imageio
 import numpy as np
+import drjit as dr
 import torch
 import torch.nn as nn
 import mitsuba as mi
@@ -28,6 +29,19 @@ def fibonacci_sphere(samples):
     points = np.array(points)
     return points
 
+def amazing_function(x):
+    
+    T = 1.0
+    x = T * dr.log(1.0 + x / T)
+
+    return x
+
+def amazing_function_np(x):
+    
+    T = 1.0
+    x = T * np.log(1.0 + x / T)
+
+    return x
 
 def equirec_sphere(H, W):
     v, u = np.meshgrid(
@@ -68,42 +82,41 @@ def SG_energy(lgtSGs):
     energy = lgtMu * 2.0 * np.pi / lgtLambda * (1.0 - torch.exp(-2.0 * lgtLambda))
     return energy
 
-
-def SG2Envmap(envmap_base_color, lgtSGs, H, W, upper_hemi=False, viewdirs=None, fixed_lobe=False):
-    if viewdirs is None:
-        if upper_hemi:
-            phi, theta = torch.meshgrid(
-                [
-                    torch.linspace(0.0, np.pi / 2.0, H),
-                    torch.linspace(-0.5 * np.pi, 1.5 * np.pi, W),
-                ]
-            )
-            viewdirs = torch.stack(
-                [
-                    torch.cos(theta) * torch.sin(phi),
-                    torch.cos(phi),
-                    torch.sin(theta) * torch.sin(phi),
-                ],
-                -1,
-            )  # [H, W, 3]
-        else:
-            viewdirs = torch.FloatTensor(equirec_sphere(H, W))
-        viewdirs = viewdirs.to(lgtSGs.device)
-
-    viewdirs = viewdirs.unsqueeze(-2)  # [..., 1, 3]
-    lgtSGLobes, lgtSGLambdas, lgtSGMus = lgtSGs.split([3, 1, 3], dim=-1)
-    if fixed_lobe:
-        lgtSGLobes = lgtSGLobes.detach()
-    lgtSGLobes = torch.nn.functional.normalize(lgtSGLobes, dim=-1)
-    lgtSGLambdas = lgtSGLambdas.abs()
-    lgtSGMus = lgtSGMus.abs()
-    lgt_w = torch.exp(
-        torch.exp(lgtSGLambdas) * (torch.sum(viewdirs * lgtSGLobes, dim=-1, keepdim=True) - 1.0)
+def equirec_sphere(H, W):
+    v, u = np.meshgrid(
+        -((np.arange(H) + 0.5) / H - 0.5) * np.pi,
+        np.arange(W) / W * np.pi * 2 - np.pi / 2,
+        indexing="ij",
     )
-    rgb = torch.bmm(lgtSGMus.T[None].repeat(len(lgt_w), 1, 1), lgt_w) #[131072, 3]
+    points = np.stack(
+        [np.cos(v) * np.cos(u), np.sin(v), np.cos(v) * np.sin(u)], -1
+    ).reshape(-1, 3)
+    return points
 
-    rgb += envmap_base_color[None, :]
-    envmap = rgb.reshape((H, W, 3))
+def SG2Envmap(lgtSGs, H, W):
+    viewdirs = equirec_sphere(H, W)  # [H*W, 3]
+    viewdirs = viewdirs.reshape(H, W, 1, 3)       # [H, W, 1, 3], expand for broadcasting with SGs
+    
+    # Split SG parameters: lobes [N, 3], lambdas [N, 1], mus [N, 3]
+    lgtSGLobes, lgtSGLambdas, lgtSGMus = np.split(lgtSGs, [3, 4], axis=-1)
+
+    lgtSGLambdas = np.abs(lgtSGLambdas)      # [N, 1], ensure lambdas are positive
+    lgtSGMus = np.abs(lgtSGMus)              # [N, 3], ensure mus are positive
+    
+    # Normalize lobes to unit vectors: [N, 3]
+    lgtSGLobes = lgtSGLobes / (np.linalg.norm(lgtSGLobes, axis=-1, keepdims=True) + 1e-8)
+   
+    # Compute dot product between viewdirs and lobes: [H, W, N]
+    dot = np.sum(viewdirs * lgtSGLobes, axis=-1)
+    # Broadcast lambdas and compute SG weights: [H, W, N, 1]
+    lgt_w = np.exp(lgtSGLambdas * (dot[..., None] - 1.0))
+    
+    # Broadcast mus and compute RGB contribution for each SG: [H, W, N, 3]
+    rgb = lgt_w * amazing_function_np(lgtSGMus[None, None, :, :])
+
+    # Sum over all SGs to get final envmap: [H, W, 3]
+    envmap = np.sum(rgb, axis=2).astype(np.float32)
+
     return envmap
 
 

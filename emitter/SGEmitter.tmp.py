@@ -4,7 +4,7 @@ from typing import Optional
 import drjit as dr
 import mitsuba as mi
 from .myenvmap import MyEnvironmentMapEmitter, indent
-from .sgenvmap_util import fibonacci_sphere
+from .sgenvmap_util import fibonacci_sphere, amazing_function
 
 class SGEmitter(MyEnvironmentMapEmitter):
     def __init__(self, props: mi.Properties):
@@ -45,12 +45,10 @@ class SGEmitter(MyEnvironmentMapEmitter):
 
     def eval_sg_ray(self, o: mi.Point3f, v: mi.Vector3f, near: mi.Float, active: bool = True) -> mi.Color3f:
         res = mi.Color3f(0.0)
-        res += self.base_color
-
         {% for i in range(num_sgs) %}
-        res += dr.exp(dr.exp(self.lambda_{{ i }}) * (dr.dot(v, dr.normalize(self.lobe_{{ i }})) - 1)) * self.mu_{{ i }}
+        res += dr.exp(self.lambda_{{ i }} * (dr.dot(v, dr.normalize(self.lobe_{{ i }})) - 1)) * amazing_function(self.mu_{{ i }})
         {% endfor %}
-
+        
         return res
 
     def eval_sg(self, o: mi.Point3f, v: mi.Vector3f, active: bool = True) -> mi.Color3f:

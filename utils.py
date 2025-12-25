@@ -210,9 +210,9 @@ def render_envmap_bitmap(params, num_sgs):
     envmap_base_color = torch.from_numpy(envmap_base_color)
 
     lgtSGs = get_lgtSGs(params, num_sgs)
-    lgtSGs_torch = torch.tensor(lgtSGs, dtype=torch.float32)
+    lgtSGs_np = np.array(lgtSGs, dtype=np.float32)
 
-    envmap = SG2Envmap(envmap_base_color, lgtSGs_torch, 256, 512).detach().cpu().numpy()
+    envmap = SG2Envmap(lgtSGs_np, 256, 512)
     return mi.Bitmap(envmap)
 
 def save_sg_envmap(params, num_sgs, iter):

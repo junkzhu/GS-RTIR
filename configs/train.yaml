@@ -16,6 +16,8 @@ optimizer:
       sg_lambda_lr: 0.02
       sg_mu_lr: 0.02
 
+      data_lr: 0.02
+
   scheduler:
     type: cosine
     min_factor: 0.5

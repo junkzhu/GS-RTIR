@@ -70,7 +70,7 @@ def load_scene_config():
         else:
             scene_config['envmap'] = {
                 'type': 'envmap',
-                'filename': 'D:/dataset/Environment_Maps/high_res_envmaps_1k/init_1280_640.exr',
+                'filename': './emitter/init_1280_640.exr',
                 'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
                             mi.ScalarTransform4f.rotate([1, 0, 0], 90)
             }
@@ -116,20 +116,24 @@ def register_optimizer(params, train_conf):
 
     # register envmap parameters
     if args.envmap_optimization:
-        opt['envmap.base_color'] = params['envmap.base_color']
-        opt['envmap.position'] = params['envmap.position']
-        opt['envmap.weight'] = params['envmap.weight']
-        opt['envmap.std'] = params['envmap.std']
-        for i in range(args.num_sgs):
-            opt[f'envmap.lgtSGslobe_{i}']   = params[f'envmap.lgtSGslobe_{i}']
-            opt[f'envmap.lgtSGslambda_{i}'] = params[f'envmap.lgtSGslambda_{i}']
-            opt[f'envmap.lgtSGsmu_{i}']     = params[f'envmap.lgtSGsmu_{i}']
+        if args.spherical_gaussian:
+            opt['envmap.base_color'] = params['envmap.base_color']
+            opt['envmap.position'] = params['envmap.position']
+            opt['envmap.weight'] = params['envmap.weight']
+            opt['envmap.std'] = params['envmap.std']
+            for i in range(args.num_sgs):
+                opt[f'envmap.lgtSGslobe_{i}']   = params[f'envmap.lgtSGslobe_{i}']
+                opt[f'envmap.lgtSGslambda_{i}'] = params[f'envmap.lgtSGslambda_{i}']
+                opt[f'envmap.lgtSGsmu_{i}']     = params[f'envmap.lgtSGsmu_{i}']
 
-        lr_dict['envmap.base_color'] = train_conf.optimizer.params.envmap.base_color_lr
-        for i in range(args.num_sgs):
-            lr_dict[f'envmap.lgtSGslobe_{i}']   = train_conf.optimizer.params.envmap.sg_lobe_lr
-            lr_dict[f'envmap.lgtSGslambda_{i}'] = train_conf.optimizer.params.envmap.sg_lambda_lr
-            lr_dict[f'envmap.lgtSGsmu_{i}']     = train_conf.optimizer.params.envmap.sg_mu_lr
+            lr_dict['envmap.base_color'] = train_conf.optimizer.params.envmap.base_color_lr
+            for i in range(args.num_sgs):
+                lr_dict[f'envmap.lgtSGslobe_{i}']   = train_conf.optimizer.params.envmap.sg_lobe_lr
+                lr_dict[f'envmap.lgtSGslambda_{i}'] = train_conf.optimizer.params.envmap.sg_lambda_lr
+                lr_dict[f'envmap.lgtSGsmu_{i}']     = train_conf.optimizer.params.envmap.sg_mu_lr
+        else:
+            opt['envmap.data'] = params['envmap.data']
+            lr_dict['envmap.data'] = train_conf.optimizer.params.envmap.data_lr
 
     opt.set_learning_rate(lr_dict)
 
@@ -151,14 +155,17 @@ def update_params(opt, params):
     params['shape.roughnesses'] = opt['roughnesses']
     
     if args.envmap_optimization:
-        params['envmap.base_color'] = opt['envmap.base_color']
-        params['envmap.position'] = opt['envmap.position']
-        params['envmap.weight'] = opt['envmap.weight']
-        params['envmap.std'] = opt['envmap.std']
-        for i in range(args.num_sgs):
-            params[f'envmap.lgtSGslobe_{i}']   = opt[f'envmap.lgtSGslobe_{i}']
-            params[f'envmap.lgtSGslambda_{i}'] = opt[f'envmap.lgtSGslambda_{i}']
-            params[f'envmap.lgtSGsmu_{i}']     = opt[f'envmap.lgtSGsmu_{i}']
+        if args.spherical_gaussian:
+            params['envmap.base_color'] = opt['envmap.base_color']
+            params['envmap.position'] = opt['envmap.position']
+            params['envmap.weight'] = opt['envmap.weight']
+            params['envmap.std'] = opt['envmap.std']
+            for i in range(args.num_sgs):
+                params[f'envmap.lgtSGslobe_{i}']   = opt[f'envmap.lgtSGslobe_{i}']
+                params[f'envmap.lgtSGslambda_{i}'] = opt[f'envmap.lgtSGslambda_{i}']
+                params[f'envmap.lgtSGsmu_{i}']     = opt[f'envmap.lgtSGsmu_{i}']
+        else:
+            params['envmap.data'] = opt['envmap.data']
 
     params.update()
 
