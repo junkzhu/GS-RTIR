@@ -97,7 +97,8 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
         os.makedirs(envmap_dir, exist_ok=True)
 
         #change envmap
-        bitmap = mi.TensorXf(mi.Bitmap(envmap))
+        envmap_bmp = mi.Bitmap(envmap)
+        bitmap = mi.TensorXf(np.array(envmap_bmp, dtype=np.float32))
         params['EnvironmentMapEmitter.data'] = bitmap
 
         relight_pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc=f"Relighting {envmap_name}")
@@ -167,7 +168,7 @@ def render_materials(dataset, scene_dict):
     return three_channel_ratio
 
 if __name__ == "__main__":
-
+    mi.Bitmap("/home/zjk/datasets/Synthetic4Relight/Environment_Maps/envmap12.exr")
     dataset = Dataset(args.dataset_path, RENDER_UPSAMPLE_ITER, "test")
 
     gaussians = GaussianModel()
