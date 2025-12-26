@@ -54,7 +54,6 @@ def load_scene_config():
             # register SG envmap
             SGModel(
                 num_sgs = args.num_sgs,
-                base_color_init = np.array([0.5, 0.5, 0.5]),
                 #sg_init = np.load("output/final_optimized_sgs.npy")
             )
             
@@ -64,7 +63,7 @@ def load_scene_config():
                 'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
                             mi.ScalarTransform4f.rotate([1, 0, 0], 90)
             }
-            OPTIMIZE_PARAMS += ['envmap.lgtSGs*'] + ['envmap.base_color']
+            OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
             OPTIMIZE_PARAMS += ['envmap.position'] + ['envmap.weight'] + ['envmap.std']
         
         else:
@@ -117,7 +116,6 @@ def register_optimizer(params, train_conf):
     # register envmap parameters
     if args.envmap_optimization:
         if args.spherical_gaussian:
-            opt['envmap.base_color'] = params['envmap.base_color']
             opt['envmap.position'] = params['envmap.position']
             opt['envmap.weight'] = params['envmap.weight']
             opt['envmap.std'] = params['envmap.std']
@@ -126,7 +124,6 @@ def register_optimizer(params, train_conf):
                 opt[f'envmap.lgtSGslambda_{i}'] = params[f'envmap.lgtSGslambda_{i}']
                 opt[f'envmap.lgtSGsmu_{i}']     = params[f'envmap.lgtSGsmu_{i}']
 
-            lr_dict['envmap.base_color'] = train_conf.optimizer.params.envmap.base_color_lr
             for i in range(args.num_sgs):
                 lr_dict[f'envmap.lgtSGslobe_{i}']   = train_conf.optimizer.params.envmap.sg_lobe_lr
                 lr_dict[f'envmap.lgtSGslambda_{i}'] = train_conf.optimizer.params.envmap.sg_lambda_lr
@@ -156,7 +153,6 @@ def update_params(opt, params):
     
     if args.envmap_optimization:
         if args.spherical_gaussian:
-            params['envmap.base_color'] = opt['envmap.base_color']
             params['envmap.position'] = opt['envmap.position']
             params['envmap.weight'] = opt['envmap.weight']
             params['envmap.std'] = opt['envmap.std']
@@ -193,7 +189,7 @@ if __name__ == "__main__":
     # original envmap
     envmap = mi.Bitmap(args.envmap_path)
     envmap = np.array(envmap)
-    mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'ref' + ('.png')), envmap)
+    mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'ref' + ('.exr')), envmap)
 
 
     #---------------------------------- config ----------------------------------
@@ -347,7 +343,7 @@ if __name__ == "__main__":
         if args.envmap_optimization:
             if args.spherical_gaussian:
                 envmap_img = render_envmap_bitmap(params=params, num_sgs=args.num_sgs)
-                mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
+                mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.exr')), envmap_img)
                 if (i in SAVE_ENVMAP_ITER) or i == train_conf.optimizer.iterations - 1:
                     save_sg_envmap(params, args.num_sgs, i)
             else:

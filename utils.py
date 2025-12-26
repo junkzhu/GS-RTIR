@@ -202,13 +202,8 @@ lgtSGs = [ {% for i in range(num_sgs) %} lobe_{{ i }}, lambda_{{ i }}, mu_{{ i }
     # extract lgtSGs and params (if modified by the exec code)
     return np.array(np.concatenate([np.ravel(x).astype(np.float32) for x in envmap_locals.get('lgtSGs')]), dtype=np.float32).reshape(-1, 7)
 
-def get_envmap_base_color(params):
-    return params['envmap.base_color'].numpy()
 
 def render_envmap_bitmap(params, num_sgs):
-    envmap_base_color = get_envmap_base_color(params)
-    envmap_base_color = torch.from_numpy(envmap_base_color)
-
     lgtSGs = get_lgtSGs(params, num_sgs)
     lgtSGs_np = np.array(lgtSGs, dtype=np.float32)
 
@@ -216,10 +211,6 @@ def render_envmap_bitmap(params, num_sgs):
     return mi.Bitmap(envmap)
 
 def save_sg_envmap(params, num_sgs, iter):
-    #TODO: temporarily save the basecolor in another npy file
-    base_color = get_envmap_base_color(params)
-    np.save(f"{OUTPUT_ENVMAP_DIR}/base_color_{iter:04d}.npy", base_color)
-
     lgtSGs = get_lgtSGs(params, num_sgs)
     np.save(f"{OUTPUT_ENVMAP_DIR}/optimized_sgs_{iter:04d}.npy", lgtSGs)
 

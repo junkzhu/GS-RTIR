@@ -9,6 +9,7 @@ outputs
 
 *.pth
 *.ply
+*.exr
 
 emitter/output
 emitter/SGEmitter.py

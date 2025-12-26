@@ -29,18 +29,12 @@ def fibonacci_sphere(samples):
     points = np.array(points)
     return points
 
-def amazing_function(x):
-    
-    T = 1.0
-    x = T * dr.log(1.0 + x / T)
-
+def expm1(x, T = 0.3):
+    x = dr.exp(x / T) - 1.0
     return x
 
-def amazing_function_np(x):
-    
-    T = 1.0
-    x = T * np.log(1.0 + x / T)
-
+def expm1_np(x, T = 0.3):
+    x = np.exp(x / T) - 1.0
     return x
 
 def equirec_sphere(H, W):
@@ -112,7 +106,7 @@ def SG2Envmap(lgtSGs, H, W):
     lgt_w = np.exp(lgtSGLambdas * (dot[..., None] - 1.0))
     
     # Broadcast mus and compute RGB contribution for each SG: [H, W, N, 3]
-    rgb = lgt_w * amazing_function_np(lgtSGMus[None, None, :, :])
+    rgb = lgt_w * expm1_np(lgtSGMus[None, None, :, :])
 
     # Sum over all SGs to get final envmap: [H, W, 3]
     envmap = np.sum(rgb, axis=2).astype(np.float32)

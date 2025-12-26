@@ -4,7 +4,7 @@ from typing import Optional
 import drjit as dr
 import mitsuba as mi
 from .myenvmap import MyEnvironmentMapEmitter, indent
-from .sgenvmap_util import fibonacci_sphere, amazing_function
+from .sgenvmap_util import fibonacci_sphere, expm1
 
 class SGEmitter(MyEnvironmentMapEmitter):
     def __init__(self, props: mi.Properties):
@@ -21,7 +21,6 @@ class SGEmitter(MyEnvironmentMapEmitter):
         self.scene: Optional[mi.Scene] = None
         padding_size = float(props.get('padding_size', 0.0))
         self.bounding_box = mi.BoundingBox3f(mi.Point3f(0.0 - padding_size), mi.Point3f(1.0 + padding_size))
-        self.base_color = mi.Color3f({{ base_color_init[0] }}, {{ base_color_init[1] }}, {{ base_color_init[2] }})
         
         fib_arr = fibonacci_sphere( {{ num_sgs }} )
         {% for i in range(num_sgs) %}
@@ -31,8 +30,8 @@ class SGEmitter(MyEnvironmentMapEmitter):
         self.mu_{{ i }} = mi.Vector3f([{{ sg_init[i, 4] }}, {{ sg_init[i, 5] }}, {{ sg_init[i, 6] }}])
         {% else %}
         self.lobe_{{ i }} = mi.Vector3f(fib_arr[{{ i }}])
-        self.lambda_{{ i }} = mi.Float(5.0)
-        self.mu_{{ i }} = mi.Vector3f([0.5, 0.5, 0.5])
+        self.lambda_{{ i }} = mi.Float({% if i % 2 == 0 %} 1 {% else %} 20 {% endif %})
+        self.mu_{{ i }} = mi.Vector3f([0.1, 0.1, 0.1])
         {% endif %}
         {% endfor %}
 
@@ -46,7 +45,7 @@ class SGEmitter(MyEnvironmentMapEmitter):
     def eval_sg_ray(self, o: mi.Point3f, v: mi.Vector3f, near: mi.Float, active: bool = True) -> mi.Color3f:
         res = mi.Color3f(0.0)
         {% for i in range(num_sgs) %}
-        res += dr.exp(self.lambda_{{ i }} * (dr.dot(v, dr.normalize(self.lobe_{{ i }})) - 1)) * amazing_function(self.mu_{{ i }})
+        res += dr.exp(self.lambda_{{ i }} * (dr.dot(v, dr.normalize(self.lobe_{{ i }})) - 1)) * expm1(self.mu_{{ i }})
         {% endfor %}
         
         return res
@@ -75,7 +74,6 @@ class SGEmitter(MyEnvironmentMapEmitter):
 
     def traverse(self, callback: mi.TraversalCallback) -> None:
         super().traverse(callback)
-        callback.put('base_color', self.base_color, flags=mi.ParamFlags.Differentiable)
         {% for i in range(num_sgs) %}
         callback.put('lgtSGslobe_{{ i }}', self.lobe_{{ i }}, flags=mi.ParamFlags.Differentiable)
         callback.put('lgtSGslambda_{{ i }}', self.lambda_{{ i }}, flags=mi.ParamFlags.Differentiable)

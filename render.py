@@ -50,8 +50,7 @@ def load_scene_config(envmap_init_path, optimize_envmap):
             # register SG envmap
             SGModel(
                 num_sgs = args.num_sgs,
-                sg_init = np.load(envmap_init_path),
-                base_color_init= np.load(envmap_init_path.replace('optimized_sgs_', 'base_color_'))
+                sg_init = np.load(envmap_init_path)
             )
             
             scene_config['envmap'] = {
