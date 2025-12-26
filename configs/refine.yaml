@@ -1,0 +1,14 @@
+optimizer:
+  iterations: 500
+  params:
+    centers_lr: 0.0002
+    scales_lr: 0.0002
+    quats_lr: 0.0002
+    opacities_lr: 0.0005
+    sh_coeffs_lr: 0.003
+    normals_lr: 0.02
+
+  scheduler:
+    type: cosine
+    min_factor: 0.1
+

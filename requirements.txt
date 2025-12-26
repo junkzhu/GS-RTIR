@@ -1,0 +1,16 @@
+python==3.9.23
+
+torch==2.8.0
+torchvision==0.23.0
+
+mitsuba==3.7.0
+drjit==1.1.0
+
+tqdm==4.67.1
+omegaconf==2.3.0
+imageio==2.37.2
+plyfile==1.1.3
+scipy==1.13.1
+matplotlib==3.9.4
+lpips==0.1.4
+natsort==8.4.0

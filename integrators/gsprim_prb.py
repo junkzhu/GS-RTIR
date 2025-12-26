@@ -9,6 +9,9 @@ from .reparam import ReparamIntegrator
 class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
     def __init__(self, props):
         super().__init__(props)
+        rr_depth       = int(props.get('rr_depth', 2))
+        self.rr_depth  = mi.UInt32(rr_depth if rr_depth > 0 else 2**32-1)
+        self.use_rr = rr_depth < self.max_depth
 
     def aovs(self):
         return []
@@ -137,7 +140,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         
         primal = (mode == dr.ADMode.Primal)
         
-        valid_ray = (not self.hide_emitters) and scene.environment() is not None
+        valid_ray = (not self.hide_emitters) and scene.environment() is not None #TODO: hide_emitters not work in prb
 
         # --------------------- Configure loop state ----------------------
         mask_pt = mi.Mask(active)
@@ -150,6 +153,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         δL = mi.Spectrum(δL if δL is not None else 0)
 
         aov_A, aov_R, aov_M, aov_D, aov_N = mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0), mi.Spectrum(0.0)
+        L_direct, L_indirect = mi.Spectrum(0.0), mi.Spectrum(0.0)
 
         β = mi.Spectrum(1)
         mis_em = mi.Float(1)
@@ -160,9 +164,9 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         si_prev = dr.zeros(mi.SurfaceInteraction3f)
 
         A_prev = mi.Spectrum(0.0)
-        R_prev = mi.Float(0.0)
-        M_prev = mi.Float(0.0)
-        D_prev = mi.Float(0.0)
+        R_prev = mi.Spectrum(0.0)
+        M_prev = mi.Spectrum(0.0)
+        D_prev = mi.Spectrum(0.0)
         N_prev = mi.Spectrum(0.0)
 
         # hybrid trick (just for render)
@@ -177,13 +181,13 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             aov_D[~mask_pt] += D_wo_rt
 
         # ray tracing
-        A_cur_raw, R_cur_raw, M_cur_raw, D_cur_raw, N_cur_raw, si_valid, weight_acc = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
-        
+        A_cur_raw, R_cur_raw, M_cur_raw, D_cur_raw, N_cur_raw, hit_valid, ray_valid, weight_acc, ray_depth = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
+
         state_cur = {
             'albedo': dr.select(active, A_cur_raw, 0.0),
-            'roughness': dr.select(active, mi.Spectrum(R_cur_raw), 0.0),
-            'metallic': dr.select(active, mi.Spectrum(M_cur_raw), 0.0),
-            'depth': dr.select(active, mi.Spectrum(D_cur_raw), 0.0),
+            'roughness': dr.select(active, R_cur_raw, 0.0),
+            'metallic': dr.select(active, M_cur_raw, 0.0),
+            'depth': dr.select(active, D_cur_raw, 0.0),
             'normal': dr.select(active, N_cur_raw, 0.0),
             'weight_acc': dr.select(active, weight_acc, 0.0)
         }
@@ -194,14 +198,15 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         N_cur = self.safe_normalize(N_cur_raw)
         D_cur = D_cur_raw
 
-        si_cur = self.SurfaceInteraction3f(ray_cur, D_cur, N_cur, si_valid)
+        si_cur = self.SurfaceInteraction3f(ray_cur, D_cur, N_cur, hit_valid)
+        active &= si_cur.is_valid()
         
-        valid_ray |= si_cur.is_valid() # output mask
+        valid_ray |= active # output mask
         
         #aov & state_outs
         aov_A[mask_pt] += dr.select(active, A_cur, 0.0)
-        aov_R[mask_pt] += dr.select(active, mi.Spectrum(R_cur), 0.0)
-        aov_M[mask_pt] += dr.select(active, mi.Spectrum(M_cur), 0.0)
+        aov_R[mask_pt] += dr.select(active, R_cur, 0.0)
+        aov_M[mask_pt] += dr.select(active, M_cur, 0.0)
         aov_N[mask_pt] += dr.select(active, N_cur, 0.0)
         aov_D[mask_pt] += dr.select(active, D_cur, 0.0)
 
@@ -217,14 +222,20 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         while dr.hint(active, max_iterations=self.max_depth, label="Path Replay Backpropagation (%s)" % mode.name):
             first_vertex = mi.Bool(depth == 0)
             active_next = mi.Bool(active)
+            mis_direct = 0.0
             
             if not primal:
                 with dr.resume_grad():
                     dr.enable_grad(A_cur, R_cur, M_cur, D_cur, N_cur)
                     dr.disable_grad(si_prev)
             
-            with dr.resume_grad(when=not primal):      
-                Le = β * mis_em * si_cur.emitter(scene).eval(si_cur)
+            with dr.resume_grad(when=not primal):  
+                si_e = dr.zeros(mi.SurfaceInteraction3f)
+                si_e.wi = -ray_cur.d
+                emitter_val = dr.select(ray_valid, scene.environment().eval(si_e), 0.0)
+                Le = dr.select(first_vertex, 0.0, β * mis_em * emitter_val)
+                
+                #Le = dr.select(si_cur.is_valid(), β * mis_em * si_cur.emitter(scene).eval(si_cur), 0.0)
            
             active_next &= (depth + 1 < self.max_depth) & si_cur.is_valid()
             # Next event estimation
@@ -236,7 +247,12 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 em_ray = si_cur.spawn_ray(ds.d)
                 em_ray.d = dr.detach(em_ray.d)
 
-                em_ray_valid = dr.dot(N_cur, em_ray.d) > 0.0
+                cosα = dr.abs(dr.dot(ray_cur.d, dr.detach(N_cur)))
+                cosθ = dr.maximum(dr.abs(dr.dot(dr.detach(N_cur), em_ray.d)), 1e-8)
+                occ_offset = dr.minimum((ray_depth*cosα/cosθ), self.selfocc_offset_max)
+                em_ray.o = dr.detach(em_ray.o) + occ_offset * em_ray.d
+
+                em_ray_valid = dr.dot(dr.detach(N_cur), em_ray.d) > 0.0
                 occluded = self.shadow_ray_test(scene, sampler, em_ray, active_em & em_ray_valid)
 
                 visibility = dr.select(~occluded, 1.0, 0.0)
@@ -263,27 +279,28 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             L_prev = L 
 
             L = (L + Le + Lr_dir) if primal else (L - Le - Lr_dir)
-                
-            # render direct illumination
-            # L += dr.select((depth == 1), Le, 0.0)
-            # L += dr.select(first_vertex, Lr_dir, 0.0)
 
-            # # render indirect illumination
-            # L += dr.select((depth == 1), 0.0, Le)
-            # L += dr.select(first_vertex, 0.0, Lr_dir)
+            if self.separate_direct_indirect:
+                # render direct illumination
+                L_direct = dr.select((depth == 1), Le, 0.0) + dr.select(first_vertex, Lr_dir, 0.0)
+                # render indirect illumination
+                L_indirect = dr.select((depth == 1), 0.0, Le) + dr.select(first_vertex, 0.0, Lr_dir)
                  
             # Intersect next surface
-            ray_next = self.next_ray(scene, si_cur, bsdf_dir, active_next) # set offset to avoid self-occ
+            cosα = dr.abs(dr.dot(ray_cur.d, N_cur))
+            cosθ = dr.maximum(dr.abs(dr.dot(N_cur, bsdf_dir)), 1e-8)
+            occ_offset = dr.minimum((ray_depth*cosα/cosθ), self.selfocc_offset_max)
+            ray_next = self.next_ray(scene, si_cur, bsdf_dir, occ_offset, active_next) # set offset to avoid self-occ
             ray_next_valid = dr.dot(N_cur, ray_next.d) > 0.0
             active_next &= ray_next_valid
 
-            A_next_raw, R_next_raw, M_next_raw, D_next_raw, N_next_raw, si_next_valid, weight_acc_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
+            A_next_raw, R_next_raw, M_next_raw, D_next_raw, N_next_raw, hit_valid_next, ray_next_valid, weight_acc_next, ray_depth_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
             
             state_next = {
                 'albedo': dr.select(active, A_next_raw, 0.0),
-                'roughness': dr.select(active, mi.Spectrum(R_next_raw), 0.0),
-                'metallic': dr.select(active, mi.Spectrum(M_next_raw), 0.0),
-                'depth': dr.select(active, mi.Spectrum(D_next_raw), 0.0),
+                'roughness': dr.select(active, R_next_raw, 0.0),
+                'metallic': dr.select(active, M_next_raw, 0.0),
+                'depth': dr.select(active, D_next_raw, 0.0),
                 'normal': dr.select(active, N_next_raw, 0.0),
                 'weight_acc': dr.select(active, weight_acc_next, 0.0)
             }
@@ -294,7 +311,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             N_next = self.safe_normalize(N_next_raw)
             D_next = D_next_raw
             
-            si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, si_next_valid)
+            si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, hit_valid_next)
 
             # Compute MIS weight for the next vertex
             ds = mi.DirectionSample3f(scene, si=si_next, ref=si_cur)
@@ -355,20 +372,38 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     Lo = (Le + Lr_dir + Lr_ind) + extra
                     Lo[depth > self.max_depth] = 0
                     
-                    dr.backward_from(Lo)
+                    dr.backward_from(δL * Lo)
 
                     δA_cur, δR_cur, δM_cur, δD_cur, δN_cur = map(dr.grad, (A_cur, R_cur, M_cur, D_cur, N_cur))
+                    
+                # Small trick: convert spectrum gradient to float, then multiply by δL
+                δR_cur = δL * dr.sum(δR_cur/δL) / mis_direct
+                δM_cur = δL * dr.sum(δM_cur/δL) / mis_direct
+                δD_cur = δL * dr.sum(δD_cur/δL) / mis_direct
 
-                δA = dr.select(first_vertex, δA + δA_cur * δL, δA_cur * δL) # ∂loss/∂RGB * ∂RGB/∂A + ∂loss/∂A = ∂loss/∂A
-                δR = dr.select(first_vertex, δR + δR_cur * δL, δR_cur * δL)
-                δM = dr.select(first_vertex, δM + δM_cur * δL, δM_cur * δL)
-                δD = dr.select(first_vertex, δD + δD_cur * δL, δD_cur * δL)
-                δN = dr.select(first_vertex, δN + δN_cur * δL, δN_cur * δL)
+                δA_in = dr.select(first_vertex, δA_cur + δA, δA_cur) # ∂loss/∂RGB * ∂RGB/∂A + ∂loss/∂A = ∂loss/∂A
+                δR_in = dr.select(first_vertex, δR_cur + δR, δR_cur)
+                δM_in = dr.select(first_vertex, δM_cur + δM, δM_cur)
+                δD_in = dr.select(first_vertex, δD_cur + δD, δD_cur)
+                δN_in = dr.select(first_vertex, δN_cur + δN, δN_cur)
 
-                self.ray_marching_loop(scene, sampler_clone, False, ray_cur, δA, δR, δM, δD, δN, state_cur, active_prev)
+                self.ray_marching_loop(scene, sampler_clone, False, ray_cur, δA_in, δR_in, δM_in, δD_in, δN_in, state_cur, active_prev)
 
             depth[si_cur.is_valid()] += 1
             
+            # Perform russian roulette
+            sample_rr = sampler.next_1d() # Ensures the same sequence of random number is drawn for the primal and adjoint passes.
+            if primal and self.use_rr:
+                q = dr.minimum(dr.max(β), 0.99)
+                perform_rr = (depth > self.rr_depth)
+                active_next &= (sample_rr < q) | ~perform_rr
+                β[perform_rr] = β * dr.rcp(q)
+            active_next &= dr.any(β > 0.005)
+            active_next &= dr.any((β != 0.0))
+
+            # Set config for next iteration
+            ray_valid = dr.detach(ray_next_valid)
+            ray_depth = dr.detach(ray_depth_next)
             state_cur = dr.detach(state_next)
             active_prev = mi.Bool(active)
             active = mi.Bool(active_next)
@@ -379,6 +414,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
         result[mask_pt] += dr.select(valid_ray, mi.Spectrum(L), 0.0)
         aovs['result'] = result
+        
+        if self.separate_direct_indirect:
+            aovs['direct_light'] = dr.select(valid_ray, mi.Spectrum(L_direct), 0.0)
+            aovs['indirect_light'] = dr.select(valid_ray, mi.Spectrum(L_indirect), 0.0)
 
         gradients = {}
         

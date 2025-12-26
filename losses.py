@@ -25,6 +25,9 @@ def lpsnr(reference, image):
     reference = np.asarray(reference, dtype=np.float32)
     image = np.asarray(image, dtype=np.float32)
 
+    reference = np.clip(reference, 0.0, None)
+    image = np.clip(image, 0.0, None)
+
     reference = reference**(1/2.2)
     image = image**(1/2.2)
 
@@ -117,3 +120,56 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
         return ssim_map.mean()
     else:
         return ssim_map.mean(1).mean(1).mean(1)
+
+def ldiscrete_laplacian_reg_1dim(data, idx):
+    
+    num_neighbors = idx.shape[1] - 1
+    
+    c = dr.gather(mi.Float, data.array, idx[:, 0])
+    
+    neighbor_sum = mi.Float(0.0)
+    for i in range(1, idx.shape[1]):
+        val = dr.gather(mi.Float, data.array, idx[:, i])
+        neighbor_sum += val
+    neighbor_avg = neighbor_sum / float(num_neighbors)
+    
+    laplacian = dr.sqr(c - neighbor_avg)
+
+    return dr.sum(laplacian)
+
+def ldiscrete_laplacian_reg_3dims(data, idx):
+
+    num_neighbors = idx.shape[1] - 1
+    c_idx = idx[:, 0] * 3
+
+    c = mi.Vector3f(
+        dr.gather(mi.Float, data.array, c_idx),
+        dr.gather(mi.Float, data.array, c_idx + 1),
+        dr.gather(mi.Float, data.array, c_idx + 2),
+    )
+    
+    neighbor_sum = mi.Vector3f(0.0)
+    for i in range(1, idx.shape[1]):
+        neighbor_idx = idx[:, i] * 3
+        val_0 = dr.gather(mi.Float, data.array, neighbor_idx)
+        val_1 = dr.gather(mi.Float, data.array, neighbor_idx + 1)
+        val_2 = dr.gather(mi.Float, data.array, neighbor_idx + 2)
+        
+        val = mi.Vector3f(val_0, val_1, val_2)
+        neighbor_sum += val
+    neighbor_avg = neighbor_sum / float(num_neighbors)
+    
+    laplacian = dr.squared_norm(c - neighbor_avg)
+
+    return dr.sum(laplacian)
+
+def envmap_reg(opt, n_sg):
+    try:
+        L_reg = 0.0
+        for i in range(n_sg):
+            mu = opt[f'envmap.lgtSGsmu_{i}']
+            L_reg += dr.squared_norm(mu)
+        return L_reg
+    except KeyError:
+        # envmap optimization is disabled, opt has no SG params
+        return 0.0
