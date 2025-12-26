@@ -249,7 +249,7 @@ def metrics_training_envmap():
     print(f"[INFO] Metrics saved to {save_path}")
 
 def metrics_relighting_envmap(envmap_name):
-    dataset = Dataset(args.dataset_path, RENDER_UPSAMPLE_ITER, env=envmap_name)
+    dataset = Dataset(args.dataset_path, RENDER_UPSAMPLE_ITER, env=envmap_name, dataset_type="test", load_ref_relight_images=args.relight)
 
     current_env_images_path = os.path.join(OUTPUT_RENDER_DIR, f'./relight/{envmap_name}')
     renders = read_RGB_images(current_env_images_path)
@@ -267,7 +267,7 @@ def metrics_relighting_envmap(envmap_name):
 
     for idx, sensor in pbar:
         rgb_img       = renders["rgb"][idx][:, :, :3]
-        ref_rgb       = dataset.ref_images[idx][sensor.film().crop_size()[0]]
+        ref_rgb       = dataset.ref_relight_images[envmap_name][idx]
 
         psnr_rgb_val = lpsnr(ref_rgb, rgb_img)
         ssim_rgb_val = lssim(ref_rgb, rgb_img)
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     
     metrics_training_envmap()
 
-    if args.dataset_type == "TensoIR":
+    if args.relight:
         envmap_name_list = get_relighting_envmap_names(args.envmap_root)
         for envmap_name in envmap_name_list:
             metrics_relighting_envmap(envmap_name)

@@ -6,8 +6,9 @@ import mitsuba as mi
 from pathlib import Path
 from PIL import Image
 from utils import resize_img
+from collections import defaultdict
 
-def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="gaussian", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
+def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="gaussian", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0]), relight_envmap_names=None, load_ref_relight_images=False):
     #-------------------------SENSORS------------------------
     sensors = []
     sensors_normal = []
@@ -204,8 +205,19 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
             d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         ref_roughness_images.append(d)
 
-    if split != 'train':
-        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None
+    # relight images
+    if load_ref_relight_images:
+        ref_relight_images=defaultdict(list)
+        for envmap_name in relight_envmap_names:
+            relight_paths = [path.replace('rgba_sunset.png', f'rgba_{envmap_name}.png') for path in image_paths] 
+            for idx, fn in enumerate(relight_paths):
+                bmp = load_bitmap(fn)
+                ref_relight_images[envmap_name].append(bmp)
+
+    if split != 'train' and load_ref_relight_images:
+        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None, ref_relight_images
+    elif split != 'train':
+        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None, None
 
     albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset.png') for path in image_paths]
     albedo_priors_images=[]
@@ -253,9 +265,9 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
             d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         normal_priors_images.append(d)
 
-    return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images
+    return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images, None
 
-def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="gaussian", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
+def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="gaussian", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0]), relight_envmap_names=None, load_ref_relight_images=False):
     #-------------------------SENSORS------------------------
     sensors = []
     sensors_normal = []
@@ -446,8 +458,33 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
                 d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
             ref_roughness_images.append(d)
 
-    if split != 'train':
-        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None
+    # relight images
+    if load_ref_relight_images:
+        ref_relight_images = defaultdict(list)
+
+        for envmap_name in relight_envmap_names:
+            relight_paths = []
+
+            for path in image_paths:
+                new_dir = os.path.dirname(path).replace(
+                    "test", f"test_rli"
+                )
+
+                fname = os.path.basename(path)
+                idx = fname.split("_")[0]
+                new_fname = f"{envmap_name}_{idx}.png"
+
+                new_path = os.path.join(new_dir, new_fname)
+                relight_paths.append(new_path)
+
+            for fn in relight_paths:
+                bmp = load_bitmap(fn)
+                ref_relight_images[envmap_name].append(bmp)
+
+    if split != 'train' and load_ref_relight_images:
+        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None, ref_relight_images
+    elif split != 'train':
+        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None, None
 
     albedo_priors_paths = [path.replace('.png', '_albedo_rgb2x.png') for path in image_paths]
     albedo_priors_images=[]

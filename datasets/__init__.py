@@ -1,9 +1,10 @@
 import os
 import numpy as np
 import mitsuba as mi
+from collections import defaultdict
 
 from constants import *
-from utils import set_sensor_res
+from utils import set_sensor_res, get_relighting_envmap_names
 from .dataset_readers import sceneLoadTypeCallbacks
 
 class Dataset:
@@ -13,7 +14,8 @@ class Dataset:
         source_path,
         render_upsampler_iters=TRAIN_UPSAMPLE_ITER,
         dataset_type="train",
-        env='sunset'
+        env='sunset',
+        load_ref_relight_images=False
     ) -> None:
         
         self.batch_size = args.batch_size
@@ -37,17 +39,23 @@ class Dataset:
         self.roughness_priors_images = {}
         self.normal_priors_images = {}
 
+        self.relight_envmap_names = get_relighting_envmap_names(args.envmap_root)
+        self.ref_relight_images = defaultdict(list)
+
         self.target_res = [800,800]
 
         if args.dataset_type == 'COLMAP':
             assert(1==2) #TODO COLMAP
         elif args.dataset_type == 'TensoIR':
-            self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["TensoIR"](
-                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env=env
+
+            self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images, self.ref_relight_images = sceneLoadTypeCallbacks["TensoIR"](
+                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env=env, 
+                relight_envmap_names=self.relight_envmap_names, load_ref_relight_images=load_ref_relight_images, 
             )
         elif args.dataset_type == 'Synthetic4Relight':
-            self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images = sceneLoadTypeCallbacks["Synthetic4Relight"](
-                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env=env
+            self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images, self.ref_relight_images  = sceneLoadTypeCallbacks["Synthetic4Relight"](
+                source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env=env, 
+                relight_envmap_names=self.relight_envmap_names, load_ref_relight_images=load_ref_relight_images,
             )
         elif args.dataset_type == 'Stanford_orb':
             assert(1==2)

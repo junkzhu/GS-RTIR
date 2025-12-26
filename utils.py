@@ -247,7 +247,9 @@ def compute_rescale_ratio(gt_albedo_list, albedo_list):
     return mi.TensorXf(single_channel_ratio), mi.TensorXf(three_channel_ratio)
 
 def load_hdr_paths(root_dir):
-    hdr_paths = glob.glob(os.path.join(root_dir, "*.hdr"))
+    hdr_paths = []
+    hdr_paths += glob.glob(os.path.join(root_dir, "*.hdr"))
+    hdr_paths += glob.glob(os.path.join(root_dir, "*.exr"))
     hdr_paths.sort()
     return hdr_paths
 
