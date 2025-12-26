@@ -15,7 +15,10 @@ from datasets import *
 from losses import *
 
 import lpips
-llpips = lpips.LPIPS(net='vgg')
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+llpips = lpips.LPIPS(net='vgg').to(device)
 
 def readImages(renders_dir):
     renders = {
@@ -119,6 +122,12 @@ def metrics_training_envmap():
         "lmae_normal": []
     }
 
+    lpips_rgb_ref_batch = []
+    lpips_rgb_pred_batch = []
+
+    lpips_alb_ref_batch = []
+    lpips_alb_pred_batch = []
+
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Metrics")
 
     for idx, sensor in pbar:
@@ -140,29 +149,57 @@ def metrics_training_envmap():
 
         psnr_rgb_val = lpsnr(ref_rgb, rgb_img)
         ssim_rgb_val = lssim(ref_rgb, rgb_img)
-        lpips_rgb_val = llpips(to_torch_image(ref_rgb), to_torch_image(rgb_img)).detach().item()
 
         psnr_alb_val = lpsnr(ref_albedo, albedo_img)
         ssim_alb_val = lssim(ref_albedo, albedo_img)
-        lpips_alb_val = llpips(to_torch_image(ref_albedo), to_torch_image(albedo_img)).detach().item()
-
+        
         l2_rough_val = l2(ref_roughness, roughness_img).numpy()
        
         metrics["psnr_rgb"].append(psnr_rgb_val)
         metrics["ssim_rgb"].append(ssim_rgb_val)
-        metrics["lpips_rgb"].append(lpips_rgb_val)
 
         metrics["psnr_albedo"].append(psnr_alb_val)
         metrics["ssim_albedo"].append(ssim_alb_val)
-        metrics["lpips_albedo"].append(lpips_alb_val)
 
         metrics["l2_roughness"].append(l2_rough_val)
-        
+
+        lpips_rgb_ref_batch.append(
+            to_torch_image(ref_rgb).to(device).squeeze(0)
+        )
+        lpips_rgb_pred_batch.append(
+            to_torch_image(rgb_img).to(device).squeeze(0)
+        )
+
+        lpips_alb_ref_batch.append(
+            to_torch_image(ref_albedo).to(device).squeeze(0)
+        )
+        lpips_alb_pred_batch.append(
+            to_torch_image(albedo_img).to(device).squeeze(0)
+        )
+
         if args.dataset_type == "TensoIR":
             ref_normal    = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
             normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
             lmae_norm_val = lmae(ref_normal, normal_img, normal_mask.squeeze())
             metrics["lmae_normal"].append(lmae_norm_val)
+        
+    with torch.no_grad():
+        lpips_rgb_vals = llpips(
+            torch.stack(lpips_rgb_ref_batch, dim=0).to(device),
+            torch.stack(lpips_rgb_pred_batch, dim=0).to(device)
+        )
+
+        lpips_alb_vals = llpips(
+            torch.stack(lpips_alb_ref_batch, dim=0).to(device),
+            torch.stack(lpips_alb_pred_batch, dim=0).to(device)
+        )
+
+    metrics["lpips_rgb"] = (
+        lpips_rgb_vals.squeeze(1).cpu().numpy().tolist()
+    )
+    metrics["lpips_albedo"] = (
+        lpips_alb_vals.squeeze(1).cpu().numpy().tolist()
+    )
 
     metrics["psnr_rgb_mean"] = float(np.mean(metrics['psnr_rgb']))
     metrics["ssim_rgb_mean"] = float(np.mean(metrics['ssim_rgb']))
@@ -205,6 +242,9 @@ def metrics_relighting_envmap(envmap_name):
         "lpips_rgb": []
     }
 
+    lpips_ref_batch = []
+    lpips_pred_batch = []
+
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Relighting Metrics")
 
     for idx, sensor in pbar:
@@ -213,11 +253,26 @@ def metrics_relighting_envmap(envmap_name):
 
         psnr_rgb_val = lpsnr(ref_rgb, rgb_img)
         ssim_rgb_val = lssim(ref_rgb, rgb_img)
-        lpips_rgb_val = llpips(to_torch_image(ref_rgb), to_torch_image(rgb_img)).detach().item()
 
         metrics["psnr_rgb"].append(psnr_rgb_val)
         metrics["ssim_rgb"].append(ssim_rgb_val)
-        metrics["lpips_rgb"].append(lpips_rgb_val)
+
+        lpips_ref_batch.append(
+            to_torch_image(ref_rgb).to(device).squeeze(0)
+        )
+        lpips_pred_batch.append(
+            to_torch_image(rgb_img).to(device).squeeze(0)
+        )
+
+    with torch.no_grad():
+        lpips_vals = llpips(
+            torch.stack(lpips_ref_batch, dim=0).cuda(),
+            torch.stack(lpips_pred_batch, dim=0).cuda()
+        )
+
+    metrics["lpips_rgb"] = (
+        lpips_vals.squeeze(1).cpu().numpy().tolist()
+    )
 
     metrics["psnr_rgb_mean"] = float(np.mean(metrics['psnr_rgb']))
     metrics["ssim_rgb_mean"] = float(np.mean(metrics['ssim_rgb']))
