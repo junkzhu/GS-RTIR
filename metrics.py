@@ -16,7 +16,7 @@ from losses import *
 
 import lpips
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 llpips = lpips.LPIPS(net='vgg').to(device)
 
@@ -183,23 +183,41 @@ def metrics_training_envmap():
             lmae_norm_val = lmae(ref_normal, normal_img, normal_mask.squeeze())
             metrics["lmae_normal"].append(lmae_norm_val)
         
+    print("Start caculate lpips...")
+    lpips_rgb_vals = []
+    lpips_alb_vals = []
     with torch.no_grad():
-        lpips_rgb_vals = llpips(
-            torch.stack(lpips_rgb_ref_batch, dim=0).to(device),
-            torch.stack(lpips_rgb_pred_batch, dim=0).to(device)
-        )
+        B = 4
 
-        lpips_alb_vals = llpips(
-            torch.stack(lpips_alb_ref_batch, dim=0).to(device),
-            torch.stack(lpips_alb_pred_batch, dim=0).to(device)
-        )
+        for i in range(0, len(lpips_rgb_ref_batch), B):
+            ref = torch.stack(lpips_rgb_ref_batch[i:i+B], dim=0).to(device).float()
+            pred = torch.stack(lpips_rgb_pred_batch[i:i+B], dim=0).to(device).float()
 
-    metrics["lpips_rgb"] = (
-        lpips_rgb_vals.squeeze(1).cpu().numpy().tolist()
-    )
-    metrics["lpips_albedo"] = (
-        lpips_alb_vals.squeeze(1).cpu().numpy().tolist()
-    )
+            v = llpips(ref, pred)
+            lpips_rgb_vals.append(v.detach().cpu())
+
+            del ref, pred, v
+            torch.cuda.empty_cache()
+
+        lpips_rgb_vals = torch.cat(lpips_rgb_vals, dim=0)
+
+        for i in range(0, len(lpips_alb_ref_batch), B):
+            ref = torch.stack(lpips_alb_ref_batch[i:i+B], dim=0).to(device).float()
+            pred = torch.stack(lpips_alb_pred_batch[i:i+B], dim=0).to(device).float()
+
+            v = llpips(ref, pred)
+            lpips_alb_vals.append(v.detach().cpu())
+
+            del ref, pred, v
+            torch.cuda.empty_cache()
+
+        lpips_alb_vals = torch.cat(lpips_alb_vals, dim=0)
+
+    for v in lpips_rgb_vals:
+        metrics["lpips_rgb"].append(float(v))
+
+    for v in lpips_alb_vals:
+        metrics["lpips_albedo"].append(float(v))
 
     metrics["psnr_rgb_mean"] = float(np.mean(metrics['psnr_rgb']))
     metrics["ssim_rgb_mean"] = float(np.mean(metrics['ssim_rgb']))
@@ -264,15 +282,22 @@ def metrics_relighting_envmap(envmap_name):
             to_torch_image(rgb_img).to(device).squeeze(0)
         )
 
+    print("Start caculate lpips...")
+    lpips_rgb_vals = []
     with torch.no_grad():
-        lpips_vals = llpips(
-            torch.stack(lpips_ref_batch, dim=0).cuda(),
-            torch.stack(lpips_pred_batch, dim=0).cuda()
-        )
+        B = 4
+        for i in range(0, len(lpips_ref_batch), B):
+            ref = torch.stack(lpips_ref_batch[i:i+B], dim=0).to(device).float()
+            pred = torch.stack(lpips_pred_batch[i:i+B], dim=0).to(device).float()
 
-    metrics["lpips_rgb"] = (
-        lpips_vals.squeeze(1).cpu().numpy().tolist()
-    )
+            v = llpips(ref, pred)
+            lpips_rgb_vals.append(v.detach().cpu())
+
+            del ref, pred, v
+            torch.cuda.empty_cache()
+
+    for v in lpips_rgb_vals:
+        metrics["lpips_rgb"].append(float(v))
 
     metrics["psnr_rgb_mean"] = float(np.mean(metrics['psnr_rgb']))
     metrics["ssim_rgb_mean"] = float(np.mean(metrics['ssim_rgb']))
