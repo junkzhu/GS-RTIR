@@ -377,9 +377,9 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     δA_cur, δR_cur, δM_cur, δD_cur, δN_cur = map(dr.grad, (A_cur, R_cur, M_cur, D_cur, N_cur))
                     
                 # Small trick: convert spectrum gradient to float, then multiply by δL
-                δR_cur = δL * dr.sum(δR_cur/δL) / mis_direct
-                δM_cur = δL * dr.sum(δM_cur/δL) / mis_direct
-                δD_cur = δL * dr.sum(δD_cur/δL) / mis_direct
+                δR_cur = δL * dr.sum(δR_cur/δL) / dr.maximum(mis_direct, 1e-8)
+                δM_cur = δL * dr.sum(δM_cur/δL) / dr.maximum(mis_direct, 1e-8)
+                δD_cur = δL * dr.sum(δD_cur/δL) / dr.maximum(mis_direct, 1e-8)
 
                 δA_in = dr.select(first_vertex, δA_cur + δA, δA_cur) # ∂loss/∂RGB * ∂RGB/∂A + ∂loss/∂A = ∂loss/∂A
                 δR_in = dr.select(first_vertex, δR_cur + δR, δR_cur)
