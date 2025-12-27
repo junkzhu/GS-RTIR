@@ -1,5 +1,6 @@
 import tqdm
 import numpy as np
+import torch
 import imageio.v2 as imageio
 from natsort import natsorted
 
@@ -19,6 +20,21 @@ import lpips
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 llpips = lpips.LPIPS(net='vgg').to(device)
+
+def srgb_to_linear(img):
+    """Convert sRGB to linear RGB (gamma correction)"""
+    return img ** 2.2
+
+def read_img(path):
+    """Read and preprocess an image file"""
+    img = imageio.imread(path).astype(np.float32) / 255.0
+    if img.shape[-1] == 4:  # RGBA
+        rgb = img[..., :3]
+        alpha = img[..., 3:4]
+        rgb = rgb * alpha
+        img = rgb
+    img = srgb_to_linear(img)  # Use the global function from utils.py
+    return img
 
 def readImages(renders_dir):
     renders = {
@@ -40,20 +56,6 @@ def readImages(renders_dir):
             image_names.append(base_name)
 
     for name in image_names:
-        def srgb_to_linear(img):
-            """Convert sRGB to linear RGB (gamma correction)"""
-            return img ** 2.2
-
-        def read_img(path):
-            img = imageio.imread(path).astype(np.float32) / 255.0
-            if img.shape[-1] == 4:  # RGBA
-                rgb = img[..., :3]
-                alpha = img[..., 3:4]
-                rgb = rgb * alpha
-                img = rgb
-            img = srgb_to_linear(img)
-            return img
-
         renders["rgb"].append(read_img(os.path.join(renders_dir, f"{name}.png")))
         renders["albedo"].append(read_img(os.path.join(renders_dir, f"{name}_albedo.png")))
         renders["roughness"].append(read_img(os.path.join(renders_dir, f"{name}_roughness.png")))
@@ -74,20 +76,6 @@ def read_RGB_images(renders_dir):
         image_paths.append(fname)
 
     for image_path in image_paths:
-        def srgb_to_linear(img):
-            """Convert sRGB to linear RGB (gamma correction)"""
-            return img ** 2.2
-
-        def read_img(path):
-            img = imageio.imread(path).astype(np.float32) / 255.0
-            if img.shape[-1] == 4:  # RGBA
-                rgb = img[..., :3]
-                alpha = img[..., 3:4]
-                rgb = rgb * alpha
-                img = rgb
-            img = srgb_to_linear(img)
-            return img
-
         renders["rgb"].append(read_img(os.path.join(renders_dir, image_path)))
     
     return renders

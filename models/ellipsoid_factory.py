@@ -59,29 +59,44 @@ class EllipsoidsFactory:
         return attributes
     
     def load_gaussian(self, gaussians):
+        # Extract all attributes as numpy arrays in batch
+        num_gaussians = gaussians._xyz.shape[0]
+        
         xyzs = gaussians._xyz.detach().numpy()
         opacitys = gaussians._opacity.detach().numpy()
         scales = gaussians._scaling.detach().numpy()
         rots = gaussians._rotation.detach().numpy()
-        normal = gaussians._normal.detach().numpy()
-        features = gaussians._features_dc.detach().numpy()
+        normals = gaussians._normal.detach().numpy()
+        features_dc = gaussians._features_dc.detach().numpy()
         feature_rests = gaussians._features_rest.detach().numpy()
-        albedo = gaussians._albedo.detach().numpy()
-        roughness = gaussians._roughness.detach().numpy()
-        metallic = gaussians._metallic.detach().numpy()
+        albedos = gaussians._albedo.detach().numpy()
+        roughnesses = gaussians._roughness.detach().numpy()
+        metallics = gaussians._metallic.detach().numpy()
         
-        for xyz, opacity, scale, rot, normal, feature, feature_rest, albedo, roughness, metallic in zip(xyzs, opacitys, scales, rots, normal, features, feature_rests, albedo, roughness, metallic):            
-            self.add(
-                mean=xyz.tolist(),
-                scale=scale.tolist(),
-                sigmat=float(opacity.item()),
-                quaternion=rot.tolist(),
-                feature=np.concatenate((feature, feature_rest), axis=0).tolist(),
-                
-                normal=normal.tolist(),
-                albedo=albedo.tolist(),
-                roughness=roughness.tolist(),
-                metallic=metallic.tolist()
-            )
-
-        return self.build()
+        # Batch concatenate features
+        features = np.concatenate((features_dc, feature_rests), axis=1)
+        
+        # Convert to Mitsuba tensors directly in batch
+        centers = mi.TensorXf(xyzs.reshape(num_gaussians, 3))
+        scales = mi.TensorXf(scales.reshape(num_gaussians, 3))
+        quats = mi.TensorXf(rots.reshape(num_gaussians, 4))
+        normals_tensor = mi.TensorXf(normals.reshape(num_gaussians, 3))
+        sigmats = mi.TensorXf(opacitys.reshape(num_gaussians, 1))
+        features_tensor = mi.TensorXf(features.reshape(num_gaussians, -1))
+        albedos_tensor = mi.TensorXf(albedos.reshape(num_gaussians, -1))
+        roughnesses_tensor = mi.TensorXf(roughnesses.reshape(num_gaussians, 1))
+        metallics_tensor = mi.TensorXf(metallics.reshape(num_gaussians, 1))
+        
+        attributes = {
+            'centers': centers,
+            'scales': scales,
+            'quats': quats,
+            'normals': normals_tensor,
+            'sigmats': sigmats,
+            'features': features_tensor,
+            'albedos': albedos_tensor,
+            'roughnesses': roughnesses_tensor,
+            'metallics': metallics_tensor
+        }
+        
+        return attributes

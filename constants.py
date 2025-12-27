@@ -16,13 +16,14 @@ def str2bool(v):
 
 def get_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--max_workers", type=int, default=8, help="The maximum number of workers for parallel processing.")
 
     #-------------- dataset config --------------
     parser.add_argument("--dataset_type", help="The name of the dataset.")
     parser.add_argument("--dataset_name", help="The name of the scene.")
     parser.add_argument("--dataset_path", help="The path to the dataset directory.")
     
-    parser.add_argument("--batch_size", type=int, default=4, help="The batch size.")
+    parser.add_argument("--batch_size", type=int, default=1, help="The batch size.")
     parser.add_argument("--shuffle", type=str2bool, default=True, help="Shuffle the dataset.")
     
     #-------------- optimization config --------------
@@ -83,35 +84,48 @@ RENDER_UPSAMPLE_ITER = []
 #--------------folder--------------
 __SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__))
 
+# Define paths but don't create directories immediately
 OUTPUT = os.path.realpath(os.path.join(__SCRIPT_DIR, './outputs'))
-os.makedirs(OUTPUT, exist_ok=True)
-
 DATASET_TYPE_DIR = os.path.realpath(os.path.join(OUTPUT, f'./{args.dataset_type}'))
-os.makedirs(DATASET_TYPE_DIR, exist_ok=True)
-
 #OUTPUT_DIR = os.path.realpath(os.path.join(DATASET_TYPE_DIR, f'./{args.dataset_name}_{timestamp}'))
 OUTPUT_DIR = os.path.realpath(os.path.join(DATASET_TYPE_DIR, f'./{args.dataset_name}'))
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 OUTPUT_REFINE_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './refine'))
-os.makedirs(OUTPUT_REFINE_DIR, exist_ok=True)
-
 OUTPUT_OPT_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './opt'))
-os.makedirs(OUTPUT_OPT_DIR, exist_ok=True)
-
 OUTPUT_EXTRA_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './extra'))
-os.makedirs(OUTPUT_EXTRA_DIR, exist_ok=True)
-
 OUTPUT_PLY_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './ply'))
-os.makedirs(OUTPUT_PLY_DIR, exist_ok=True)
-
 OUTPUT_RENDER_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './renders'))
-os.makedirs(OUTPUT_RENDER_DIR, exist_ok=True)
-
 OUTPUT_RELIGHT_DIR = os.path.realpath(os.path.join(OUTPUT_RENDER_DIR, './relight'))
-os.makedirs(OUTPUT_RELIGHT_DIR, exist_ok=True)
-
 OUTPUT_ENVMAP_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './envmap'))
-os.makedirs(OUTPUT_ENVMAP_DIR, exist_ok=True)
+
+
+def ensure_dir(directory):
+    """Ensure a directory exists, create it if it doesn't."""
+    if not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+
+
+# Create a dictionary to map directory constants to their paths for easy access
+directory_paths = {
+    'OUTPUT': OUTPUT,
+    'DATASET_TYPE_DIR': DATASET_TYPE_DIR,
+    'OUTPUT_DIR': OUTPUT_DIR,
+    'OUTPUT_REFINE_DIR': OUTPUT_REFINE_DIR,
+    'OUTPUT_OPT_DIR': OUTPUT_OPT_DIR,
+    'OUTPUT_EXTRA_DIR': OUTPUT_EXTRA_DIR,
+    'OUTPUT_PLY_DIR': OUTPUT_PLY_DIR,
+    'OUTPUT_RENDER_DIR': OUTPUT_RENDER_DIR,
+    'OUTPUT_RELIGHT_DIR': OUTPUT_RELIGHT_DIR,
+    'OUTPUT_ENVMAP_DIR': OUTPUT_ENVMAP_DIR
+}
+
+
+# Create only the base directories that are always needed
+ensure_dir(OUTPUT)
+if args.dataset_type:
+    ensure_dir(DATASET_TYPE_DIR)
+if args.dataset_name and args.dataset_type:
+    ensure_dir(OUTPUT_DIR)
+
 
 del __SCRIPT_DIR

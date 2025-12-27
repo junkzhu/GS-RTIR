@@ -4,6 +4,9 @@ import tqdm
 from jinja2 import Template
 import numpy as np
 import torch
+import time
+from functools import wraps
+from contextlib import contextmanager
 from emitter.sgenvmap_util import SG2Envmap
 import glob
 import os
@@ -25,6 +28,49 @@ def set_sensor_res(sensor, res):
     params['film.size'] = res
     sensor.parameters_changed()
     params.update()
+
+@contextmanager
+def time_measure(description="Operation"):
+    """
+    Context manager to measure execution time of a block of code.
+    
+    Args:
+        description: Description of the operation being timed
+    
+    Yields:
+        None
+    
+    Example:
+        with time_measure("Loading dataset"):
+            dataset = Dataset(args.dataset_path)
+    """
+    start_time = time.time()
+    try:
+        yield
+    finally:
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"{description} time: {elapsed_time:.4f} seconds")
+
+def time_it(func):
+    """
+    Decorator to measure execution time of a function.
+    
+    Args:
+        func: Function to be timed
+    
+    Returns:
+        Wrapped function that prints execution time
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"{func.__name__} execution time: {elapsed_time:.4f} seconds")
+        return result
+    return wrapper
 
 def _shift_tensor_2d(x, dy, dx):
     """

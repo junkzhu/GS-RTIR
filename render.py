@@ -90,11 +90,15 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
 
     envmaps = load_hdr_paths(args.envmap_root)
     
+    # Ensure render directories exist
+    ensure_dir(OUTPUT_RENDER_DIR)
+    ensure_dir(OUTPUT_RELIGHT_DIR)
+    
     for envmap in envmaps:
         #create folder
         envmap_name = Path(envmap).stem
         envmap_dir = os.path.realpath(os.path.join(OUTPUT_RELIGHT_DIR, f'./{envmap_name}'))
-        os.makedirs(envmap_dir, exist_ok=True)
+        ensure_dir(envmap_dir)
 
         #change envmap
         envmap_bmp = mi.Bitmap(envmap)
@@ -109,6 +113,9 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
 
 def render_materials(dataset, scene_dict):
     albedo_list, ref_albedo_list = [], []
+    
+    # Ensure render directory exists
+    ensure_dir(OUTPUT_RENDER_DIR)
 
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Rendering views")
 
@@ -168,18 +175,21 @@ def render_materials(dataset, scene_dict):
     return three_channel_ratio
 
 if __name__ == "__main__":
-    mi.Bitmap("/home/zjk/datasets/Synthetic4Relight/Environment_Maps/envmap12.exr")
-    dataset = Dataset(args.dataset_path, RENDER_UPSAMPLE_ITER, "test")
+    with time_measure("Loading dataset"):
+        dataset = Dataset(args.dataset_path, RENDER_UPSAMPLE_ITER, "test")
 
-    gaussians = GaussianModel()
-    gaussians.restore_from_ply(args.ply_path, False)
+    with time_measure("Initializing gaussians"):
+        gaussians = GaussianModel()
+        gaussians.restore_from_ply(args.ply_path, False)
 
-    ellipsoidsfactory = EllipsoidsFactory()
-    gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
+    with time_measure("Loading gaussian to ellipsoids factory"):
+        ellipsoidsfactory = EllipsoidsFactory()
+        gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
 
-    scene_config = load_scene_config(args.envmap_init_path, args.envmap_optimization)
-    scene_dict = mi.load_dict(scene_config)
-    params = mi.traverse(scene_dict)
+    with time_measure("Loading scene config"):
+        scene_config = load_scene_config(args.envmap_init_path, args.envmap_optimization)
+        scene_dict = mi.load_dict(scene_config)
+        params = mi.traverse(scene_dict)
 
     #---------------render materials-----------------
     three_channel_ratio = render_materials(dataset, scene_dict)
@@ -192,15 +202,18 @@ if __name__ == "__main__":
 
     #---------------relight-----------------
     if args.relight:
-        gaussians = GaussianModel()
-        args.ply_path = args.ply_path.replace(".ply", "_rescaled.ply")
-        gaussians.restore_from_ply(args.ply_path, False)
+        with time_measure("Relighting: Initializing gaussians"):
+            gaussians = GaussianModel()
+            args.ply_path = args.ply_path.replace(".ply", "_rescaled.ply")
+            gaussians.restore_from_ply(args.ply_path, False)
 
-        ellipsoidsfactory = EllipsoidsFactory()
-        gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
+        with time_measure("Relighting: Loading gaussian to ellipsoids factory"):
+            ellipsoidsfactory = EllipsoidsFactory()
+            gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
 
-        scene_config = load_scene_config(args.envmap_init_path, False)
-        scene_dict = mi.load_dict(scene_config)
-        params = mi.traverse(scene_dict)
+        with time_measure("Relighting: Loading scene config"):
+            scene_config = load_scene_config(args.envmap_init_path, False)
+            scene_dict = mi.load_dict(scene_config)
+            params = mi.traverse(scene_dict)
 
         render_relight_images(gaussians, dataset, scene_dict, params)

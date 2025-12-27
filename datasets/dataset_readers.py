@@ -7,6 +7,76 @@ from pathlib import Path
 from PIL import Image
 from utils import resize_img
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from constants import args
+
+mipmap_min_res = 100
+
+def srgb_to_linear(img):
+    """Convert sRGB to linear RGB (gamma correction)"""
+    return img ** 2.2
+
+def load_bitmap(fn, bsrgb2linear = True, normalize = False, mitsuba_axis = False):
+    """Load bitmap as float32 and apply gamma correction"""
+    img = np.array(Image.open(fn)).astype(np.float32) / 255.0  # Normalize to [0, 1]
+    
+    # Apply inverse gamma correction (sRGB → linear)
+    if bsrgb2linear:
+        img = srgb_to_linear(img)
+    
+    if normalize:
+        alpha = img[..., 3:]
+        rgb = img[..., :3]
+
+        rgb = rgb * 2 -1
+
+        if mitsuba_axis:
+            rgb[..., 0] = -rgb[..., 0]
+            rgb[..., 2] = -rgb[..., 2]
+        
+        norm = np.linalg.norm(rgb, axis=-1, keepdims=True)
+        img = rgb / np.maximum(norm, 1e-8) * alpha
+
+    if img.shape[-1] == 4:  # Handle alpha channel
+        alpha = img[..., 3:]
+        rgb = img[..., :3]
+        img = rgb * alpha  # Premultiply alpha (if needed)
+        
+    return mi.Bitmap(img)
+
+def load_mipmaps(fn, bsrgb2linear = True, normalize = False, mitsuba_axis = False):
+    bmp = load_bitmap(fn, bsrgb2linear, normalize, mitsuba_axis)
+    d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
+    new_res = bmp.size()
+    while np.min(new_res) > mipmap_min_res:
+        new_res = new_res // 2
+        d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
+    return d
+
+def load_normal_prior_mipmaps(args, sensors, bsrgb2linear = True, normalize = False, mitsuba_axis = False):
+    idx, fn = args
+    
+    bmp = load_bitmap(fn, bsrgb2linear, normalize, mitsuba_axis)
+    bmp = np.array(bmp, dtype=np.float32)
+
+    sensor = sensors[idx]
+    R_c2w = np.array(sensor.world_transform().matrix)[:3, :3].astype(np.float32).squeeze()
+    
+    H, W, _ = bmp.shape
+    bmp = bmp.reshape(-1, 3).T
+    bmp = R_c2w @ bmp
+    bmp = bmp.T.reshape(H, W, 3)
+    bmp /= np.maximum(np.linalg.norm(bmp, axis=-1, keepdims=True), 1e-8)
+
+    bmp = mi.Bitmap(bmp)
+
+    d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
+    new_res = bmp.size()
+    while np.min(new_res) > mipmap_min_res:
+        new_res = new_res // 2
+        d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
+    
+    return d
 
 def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="gaussian", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0]), relight_envmap_names=None, load_ref_relight_images=False):
     #-------------------------SENSORS------------------------
@@ -125,86 +195,45 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
         if not img_path.exists():
             raise FileNotFoundError(f"Image file not found: {img_path}")
         image_paths.append(str(img_path.resolve()))
-
-    def srgb_to_linear(img):
-        """Convert sRGB to linear RGB (gamma correction)"""
-        return img ** 2.2
     
-    def load_bitmap(fn, bsrgb2linear = True, normalize = False, mitsuba = False):
-        """Load bitmap as float32 and apply gamma correction"""
-        img = np.array(Image.open(fn)).astype(np.float32) / 255.0  # Normalize to [0, 1]
-        
-        # Apply inverse gamma correction (sRGB → linear)
-        if bsrgb2linear:
-            img = srgb_to_linear(img)
-        
-        if normalize:
-            alpha = img[..., 3:]
-            rgb = img[..., :3]
-
-            rgb = rgb * 2 -1
-
-            if mitsuba:
-                rgb[..., 0] = -rgb[..., 0]
-                rgb[..., 2] = -rgb[..., 2]
-            
-            norm = np.linalg.norm(rgb, axis=-1, keepdims=True)
-            img = rgb / np.maximum(norm, 1e-8) * alpha
-
-        if img.shape[-1] == 4:  # Handle alpha channel
-            alpha = img[..., 3:]
-            rgb = img[..., :3]
-            img = rgb * alpha  # Premultiply alpha (if needed)
-            
-        return mi.Bitmap(img)
-
     ref_images=[]
-    for idx, fn in enumerate(image_paths):
-        bmp = load_bitmap(fn)
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        ref_images.append(d)
+    ref_albedo_images=[]
+    ref_normal_images=[]
+    ref_roughness_images=[]
 
     albedo_paths = [path.replace('rgba_sunset.png', 'albedo.png') for path in image_paths]
-    ref_albedo_images=[]
-    for idx, fn in enumerate(albedo_paths):
-        bmp = load_bitmap(fn, False)
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        ref_albedo_images.append(d)
-
     normal_paths = [path.replace('rgba_sunset.png', 'normal.png') for path in image_paths]
-    ref_normal_images=[]
-    for idx, fn in enumerate(normal_paths):
-        bmp = load_bitmap(fn, False, normalize=True, mitsuba=False)
-        bmp = mi.TensorXf(bmp)
-        bmp = mi.Bitmap(bmp)
-
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        ref_normal_images.append(d)
-
     roughness_paths = [path.replace('rgba_sunset.png', 'roughness.png') for path in image_paths]
-    ref_roughness_images=[]
-    for idx, fn in enumerate(roughness_paths):
-        bmp = load_bitmap(fn, False)
 
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        ref_roughness_images.append(d)
+    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+        ref_images = list(
+            executor.map(
+                lambda fn: load_mipmaps(fn),
+                image_paths
+            )
+        )
 
+        ref_albedo_images = list(
+            executor.map(
+                lambda fn: load_mipmaps(fn, False),
+                albedo_paths
+            )
+        )
+
+        ref_normal_images = list(
+            executor.map(
+                lambda fn: load_mipmaps(fn, False, normalize=True, mitsuba_axis=True),
+                normal_paths
+            )
+        )
+
+        ref_roughness_images = list(
+            executor.map(
+                lambda fn: load_mipmaps(fn, False),
+                roughness_paths
+            )
+        )
+    
     # relight images
     if load_ref_relight_images:
         ref_relight_images=defaultdict(list)
@@ -220,51 +249,35 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
     elif split != 'train':
         return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None, None
 
-    albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset.png') for path in image_paths]
     albedo_priors_images=[]
-    for idx, fn in enumerate(albedo_priors_paths):
-        bmp = load_bitmap(fn, True)
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        albedo_priors_images.append(d)
-
-    roughness_priors_paths = [path.replace('rgba_sunset.png', 'roughness_sunset.png') for path in image_paths]
     roughness_priors_images=[]
-    for idx, fn in enumerate(roughness_priors_paths):
-        bmp = load_bitmap(fn, False)
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        roughness_priors_images.append(d)
-
-    normal_priors_paths = [path.replace('rgba_sunset.png', 'normal_sunset.png') for path in image_paths]
     normal_priors_images=[]
-    for idx, fn in enumerate(normal_priors_paths):
-        bmp = load_bitmap(fn, False, normalize=True, mitsuba=True)
-        bmp = np.array(bmp, dtype=np.float32)
 
-        sensor = sensors[idx]
-        R_c2w = np.array(sensor.world_transform().matrix)[:3, :3].astype(np.float32).squeeze()
-        
-        H, W, _ = bmp.shape
-        bmp = bmp.reshape(-1, 3).T
-        bmp = R_c2w @ bmp
-        bmp = bmp.T.reshape(H, W, 3)
-        bmp /= np.maximum(np.linalg.norm(bmp, axis=-1, keepdims=True), 1e-8)
+    albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset.png') for path in image_paths]
+    roughness_priors_paths = [path.replace('rgba_sunset.png', 'roughness_sunset.png') for path in image_paths]
+    normal_priors_paths = [path.replace('rgba_sunset.png', 'normal_sunset.png') for path in image_paths]
 
-        bmp = mi.Bitmap(bmp)
+    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+        albedo_priors_images = list(
+            executor.map(
+                lambda fn: load_mipmaps(fn, False),
+                albedo_priors_paths
+            )
+        )
 
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        normal_priors_images.append(d)
+        roughness_priors_images = list(
+            executor.map(
+                lambda fn: load_mipmaps(fn, False),
+                roughness_priors_paths
+            )
+        )
+
+        normal_priors_images = list(
+            executor.map(
+                lambda args: load_normal_prior_mipmaps(args, sensors, False, normalize=True, mitsuba_axis=True),
+                enumerate(normal_priors_paths)
+            )
+        )
 
     return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images, None
 
@@ -392,72 +405,19 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
             raise FileNotFoundError(f"Image file not found: {img_path}")
         image_paths.append(str(img_path.resolve()))
 
-    def srgb_to_linear(img):
-        """Convert sRGB to linear RGB (gamma correction)"""
-        return img ** 2.2
-    
-    def load_bitmap(fn, bsrgb2linear = True, normalize = False, mitsuba = False):
-        """Load bitmap as float32 and apply gamma correction"""
-        img = np.array(Image.open(fn)).astype(np.float32) / 255.0  # Normalize to [0, 1]
-        
-        # Apply inverse gamma correction (sRGB → linear)
-        if bsrgb2linear:
-            img = srgb_to_linear(img)
-        
-        if normalize:
-            alpha = img[..., 3:]
-            rgb = img[..., :3]
-
-            rgb = rgb * 2 -1
-
-            if mitsuba:
-                rgb[..., 0] = -rgb[..., 0]
-                rgb[..., 2] = -rgb[..., 2]
-            
-            norm = np.linalg.norm(rgb, axis=-1, keepdims=True)
-            img = rgb / np.maximum(norm, 1e-8) * alpha
-
-        if img.shape[-1] == 4:  # Handle alpha channel
-            alpha = img[..., 3:]
-            rgb = img[..., :3]
-            img = rgb * alpha  # Premultiply alpha (if needed)
-            
-        return mi.Bitmap(img)
-
-    ref_images=[]
-    for idx, fn in enumerate(image_paths):
-        bmp = load_bitmap(fn)
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        ref_images.append(d)
+    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+        ref_images = list(executor.map(load_mipmaps, image_paths))
 
     ref_albedo_images=[]
     ref_roughness_images=[]
 
     if split == 'test':
         albedo_paths = [path.replace('_rgba.png', '_albedo.png') for path in image_paths]  
-        for idx, fn in enumerate(albedo_paths):
-            bmp = load_bitmap(fn, bsrgb2linear=True)
-            d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-            new_res = bmp.size()
-            while np.min(new_res) > 4:
-                new_res = new_res // 2
-                d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-            ref_albedo_images.append(d)
- 
         roughness_paths = [path.replace('_rgba.png', '_rough.png') for path in image_paths]
-        for idx, fn in enumerate(roughness_paths):
-            bmp = load_bitmap(fn, False)
 
-            d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-            new_res = bmp.size()
-            while np.min(new_res) > 4:
-                new_res = new_res // 2
-                d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-            ref_roughness_images.append(d)
+        with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+            ref_albedo_images = list(executor.map(lambda fn: load_mipmaps(fn, False), albedo_paths))
+            ref_roughness_images = list(executor.map(lambda fn: load_mipmaps(fn, False), roughness_paths))
 
     # relight images
     if load_ref_relight_images:
@@ -488,51 +448,18 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
     elif split != 'train':
         return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None, None
 
-    albedo_priors_paths = [path.replace('.png', '_albedo_rgb2x.png') for path in image_paths]
     albedo_priors_images=[]
-    for idx, fn in enumerate(albedo_priors_paths):
-        bmp = load_bitmap(fn, True)
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        albedo_priors_images.append(d)
-
-    roughness_priors_paths = [path.replace('.png', '_roughness_rgb2x.png') for path in image_paths]
     roughness_priors_images=[]
-    for idx, fn in enumerate(roughness_priors_paths):
-        bmp = load_bitmap(fn, False)
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        roughness_priors_images.append(d)
-
-    normal_priors_paths = [path.replace('.png', '_normal_rgb2x.png') for path in image_paths]
     normal_priors_images=[]
-    for idx, fn in enumerate(normal_priors_paths):
-        bmp = load_bitmap(fn, False, normalize=True, mitsuba=True)
-        bmp = np.array(bmp, dtype=np.float32)
 
-        sensor = sensors[idx]
-        R_c2w = np.array(sensor.world_transform().matrix)[:3, :3].astype(np.float32).squeeze()
-        
-        H, W, _ = bmp.shape
-        bmp = bmp.reshape(-1, 3).T
-        bmp = R_c2w @ bmp
-        bmp = bmp.T.reshape(H, W, 3)
-        bmp /= np.maximum(np.linalg.norm(bmp, axis=-1, keepdims=True), 1e-8)
+    albedo_priors_paths = [path.replace('.png', '_albedo_rgb2x.png') for path in image_paths]
+    roughness_priors_paths = [path.replace('.png', '_roughness_rgb2x.png') for path in image_paths]
+    normal_priors_paths = [path.replace('.png', '_normal_rgb2x.png') for path in image_paths]
 
-        bmp = mi.Bitmap(bmp)
-
-        d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
-        new_res = bmp.size()
-        while np.min(new_res) > 4:
-            new_res = new_res // 2
-            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-        normal_priors_images.append(d)
+    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+        albedo_priors_images = list(executor.map(lambda fn: load_mipmaps(fn, True), albedo_priors_paths))
+        roughness_priors_images = list(executor.map(lambda fn: load_mipmaps(fn, False), roughness_priors_paths))
+        normal_priors_images = list(executor.map(lambda args: load_normal_prior_mipmaps(args, sensors, False, normalize=True, mitsuba_axis=True), enumerate(normal_priors_paths)))
 
     return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images, None
 
