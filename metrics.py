@@ -295,6 +295,8 @@ def metrics_relighting_envmap(envmap_name):
 
             del ref, pred, v
             torch.cuda.empty_cache()
+    
+    lpips_rgb_vals = torch.cat(lpips_rgb_vals, dim=0)
 
     for v in lpips_rgb_vals:
         metrics["lpips_rgb"].append(float(v))
