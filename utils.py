@@ -13,6 +13,30 @@ import os
 from pathlib import Path
 from constants import *
 
+def srgb_to_linear(img, clip=True):
+    img = np.asarray(img, dtype=np.float32)
+
+    if clip:
+        img = np.clip(img, 0.0, 1.0)
+
+    return np.where(
+        img < 0.04045,
+        img / 12.92,
+        ((img + 0.055) / 1.055) ** 2.4
+    )
+
+def linear_to_srgb(img, clip=True):
+    img = np.asarray(img, dtype=np.float32)
+
+    if clip:
+        img = np.clip(img, 0.0, 1.0)
+
+    return np.where(
+        img < 0.0031308,
+        img * 12.92,
+        1.055 * np.power(img, 1.0 / 2.4) - 0.055
+    )
+
 def resize_img(img, target_res, smooth=False):
     """Resizes a Mitsuba Bitmap using either a box filter (smooth=False)
        or a gaussian filter (smooth=True)"""
@@ -287,7 +311,7 @@ def compute_rescale_ratio(gt_albedo_list, albedo_list):
     single_channel_ratio = (gt_all / albedo_all.clamp(min=1e-6))[..., 0].median()
     three_channel_ratio, _ = (gt_all / albedo_all.clamp(min=1e-6)).median(dim=0)
 
-    if (three_channel_ratio < 0.1).any():
+    if "air_baloons" in args.dataset_name:
         three_channel_ratio = [(gt_all/albedo_all.clamp_min(1e-6))[..., 0].median().item()] * 3 # follow IRGS
 
     return mi.TensorXf(single_channel_ratio), mi.TensorXf(three_channel_ratio)

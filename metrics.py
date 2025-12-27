@@ -21,10 +21,6 @@ device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cp
 
 llpips = lpips.LPIPS(net='vgg').to(device)
 
-def srgb_to_linear(img):
-    """Convert sRGB to linear RGB (gamma correction)"""
-    return img ** 2.2
-
 def read_img(path):
     """Read and preprocess an image file"""
     img = imageio.imread(path).astype(np.float32) / 255.0

@@ -5,16 +5,12 @@ import drjit as dr
 import mitsuba as mi
 from pathlib import Path
 from PIL import Image
-from utils import resize_img
+from utils import resize_img, srgb_to_linear
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from constants import args
 
 mipmap_min_res = 100
-
-def srgb_to_linear(img):
-    """Convert sRGB to linear RGB (gamma correction)"""
-    return img ** 2.2
 
 def load_bitmap(fn, bsrgb2linear = True, normalize = False, mitsuba_axis = False):
     """Load bitmap as float32 and apply gamma correction"""

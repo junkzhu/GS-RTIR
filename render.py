@@ -15,7 +15,7 @@ from integrators import *
 from datasets import *
 from losses import *
 
-def load_scene_config(envmap_init_path, optimize_envmap):
+def load_scene_config(gaussians_attributes, envmap_init_path, optimize_envmap):
     global OPTIMIZE_PARAMS
     scene_config = {
         'type': 'scene',
@@ -187,7 +187,7 @@ if __name__ == "__main__":
         gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
 
     with time_measure("Loading scene config"):
-        scene_config = load_scene_config(args.envmap_init_path, args.envmap_optimization)
+        scene_config = load_scene_config(gaussians_attributes, args.envmap_init_path, args.envmap_optimization)
         scene_dict = mi.load_dict(scene_config)
         params = mi.traverse(scene_dict)
 
@@ -212,7 +212,7 @@ if __name__ == "__main__":
             gaussians_attributes = ellipsoidsfactory.load_gaussian(gaussians=gaussians)
 
         with time_measure("Relighting: Loading scene config"):
-            scene_config = load_scene_config(args.envmap_init_path, False)
+            scene_config = load_scene_config(gaussians_attributes, args.envmap_init_path, False)
             scene_dict = mi.load_dict(scene_config)
             params = mi.traverse(scene_dict)
 

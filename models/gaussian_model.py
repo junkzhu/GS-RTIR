@@ -1,4 +1,5 @@
 import torch
+from utils import srgb_to_linear, linear_to_srgb
 import numpy as np
 from plyfile import PlyData, PlyElement
 from typing import Dict, Tuple
@@ -313,5 +314,7 @@ class GaussianModel:
         PlyData([ply_el], text=False).write(path)
 
     def rescale_albedo(self, scale):
-        scale = torch.from_numpy(np.array(scale))
-        self._albedo = self._albedo * scale
+        albedo_linear = srgb_to_linear(self._albedo)
+        scale = np.array(scale)
+        albedo_linear = albedo_linear * scale
+        self._albedo = torch.from_numpy(linear_to_srgb(albedo_linear))
