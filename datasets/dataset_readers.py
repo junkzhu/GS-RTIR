@@ -212,7 +212,8 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
             relight_paths = [path.replace('rgba_sunset.png', f'rgba_{envmap_name}.png') for path in image_paths] 
             for idx, fn in enumerate(relight_paths):
                 bmp = load_bitmap(fn)
-                ref_relight_images[envmap_name].append(bmp)
+                d = mi.TensorXf(bmp)
+                ref_relight_images[envmap_name].append(d)
 
     if split != 'train' and load_ref_relight_images:
         return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None, ref_relight_images
@@ -479,7 +480,8 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
 
             for fn in relight_paths:
                 bmp = load_bitmap(fn)
-                ref_relight_images[envmap_name].append(bmp)
+                d = mi.TensorXf(bmp)
+                ref_relight_images[envmap_name].append(d)
 
     if split != 'train' and load_ref_relight_images:
         return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None, ref_relight_images
@@ -532,7 +534,7 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
             d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
         normal_priors_images.append(d)
 
-    return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images
+    return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images, None
 
 def read_Stanford_orb(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="gaussian", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
     #-------------------------SENSORS------------------------
