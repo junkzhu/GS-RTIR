@@ -15,25 +15,25 @@ ENVIRONMENT_MAPS="/home/zjk/datasets/TensoIR/Environment_Maps"
 ITERATION="299"  # Default iteration number, can be overridden by command line argument
 
 # Enable/disable switches for each step
-enable_refine=true
+enable_refine=false
 enable_train=true
 enable_render=true
 enable_metrics=true
-enable_relight=true  # Switch for relight functionality
+enable_relight=false  # Switch for relight functionality
 
 # Scene-specific parameters
 declare -A SCENE_PARAMS
 SCENE_PARAMS[lego,offset]="0.1"
-SCENE_PARAMS[lego,geometry_threshold]="0.3"
+SCENE_PARAMS[lego,geometry_threshold]="0.2"
 
-SCENE_PARAMS[hotdog,offset]="0.1"
+SCENE_PARAMS[hotdog,offset]="0.05"
 SCENE_PARAMS[hotdog,geometry_threshold]="0.3"
 
 SCENE_PARAMS[armadillo,offset]="0.1"
 SCENE_PARAMS[armadillo,geometry_threshold]="0.3"
 
-SCENE_PARAMS[ficus,offset]="0.1"
-SCENE_PARAMS[ficus,geometry_threshold]="0.25"
+SCENE_PARAMS[ficus,offset]="0.2"
+SCENE_PARAMS[ficus,geometry_threshold]="0.2"
 
 # Function to run refine for a scene
 run_refine() {

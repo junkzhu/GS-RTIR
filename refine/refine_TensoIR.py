@@ -38,7 +38,7 @@ class RefineTensoIR(RefineBase):
         normal_mask_flat = np.reshape(normal_mask, (-1, 1)).squeeze()
         
         # Calculate losses
-        view_loss = l1(ref_img, img) / self.dataset.batch_size
+        view_loss = l1(ref_img, img, convert_to_srgb=True) / self.dataset.batch_size
         normal_l2_loss = l2(ref_normal, normal_img) / self.dataset.batch_size
         
         # Total loss
@@ -55,14 +55,14 @@ class RefineTensoIR(RefineBase):
         fake_normal_img = convert_depth_to_normal(depth_img, sensor)
         fake_normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (fake_normal_img+1)/2, 0))), self.dataset.target_res)
         
-        mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{self.i:04d}-{idx:02d}.png'), rgb_bmp)
-        mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{self.i:04d}-{idx:02d}_ref.png'), rgb_ref_bmp)
-        mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{self.i:04d}-{idx:02d}_depth.png'), depth_bmp)
-        mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{self.i:04d}-{idx:02d}_normal.png'), normal_bmp)
-        mi.util.write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{self.i:04d}-{idx:02d}_fake_normal.png'), fake_normal_bmp)
+        write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{self.i:04d}-{idx:02d}.png'), rgb_bmp)
+        write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{self.i:04d}-{idx:02d}_ref.png'), rgb_ref_bmp)
+        write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{self.i:04d}-{idx:02d}_depth.png'), depth_bmp)
+        write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{self.i:04d}-{idx:02d}_normal.png'), normal_bmp)
+        write_bitmap(join(OUTPUT_REFINE_DIR, f'opt-{self.i:04d}-{idx:02d}_fake_normal.png'), fake_normal_bmp)
         
         # Calculate PSNR and MAE
-        rgb_psnr_val = lpsnr(ref_img, img) / self.dataset.batch_size
+        rgb_psnr_val = lpsnr(ref_img, img, convert_to_srgb=True) / self.dataset.batch_size
         normal_mae_val = lmae(ref_normal, normal_img, normal_mask.squeeze()) / self.dataset.batch_size
         
         return view_loss, total_loss, rgb_psnr_val, normal_mae_val

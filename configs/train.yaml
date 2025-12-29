@@ -11,9 +11,9 @@ optimizer:
     roughnesses_lr: 0.02
 
     envmap:
-      sg_lobe_lr: 0.02
-      sg_lambda_lr: 0.02
-      sg_mu_lr: 0.02
+      sg_lobe_lr: 0.05
+      sg_lambda_lr: 0.05
+      sg_mu_lr: 0.05
 
       data_lr: 0.02
 

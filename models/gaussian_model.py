@@ -314,7 +314,10 @@ class GaussianModel:
         PlyData([ply_el], text=False).write(path)
 
     def rescale_albedo(self, scale):
-        albedo_linear = srgb_to_linear(self._albedo)
-        scale = np.array(scale)
-        albedo_linear = albedo_linear * scale
-        self._albedo = torch.from_numpy(linear_to_srgb(albedo_linear))
+        #albedo_linear = srgb_to_linear(self._albedo)
+        #scale = np.array(scale)
+        #albedo_linear = albedo_linear * scale
+        #self._albedo = torch.from_numpy(linear_to_srgb(albedo_linear))
+
+        scale = torch.from_numpy(np.array(scale))
+        self._albedo = self._albedo * scale

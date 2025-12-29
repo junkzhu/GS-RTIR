@@ -21,7 +21,7 @@ device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cp
 
 llpips = lpips.LPIPS(net='vgg').to(device)
 
-def read_img(path):
+def read_img(path, convert_to_linear=False):
     """Read and preprocess an image file"""
     img = imageio.imread(path).astype(np.float32) / 255.0
     if img.shape[-1] == 4:  # RGBA
@@ -29,7 +29,8 @@ def read_img(path):
         alpha = img[..., 3:4]
         rgb = rgb * alpha
         img = rgb
-    img = srgb_to_linear(img)  # Use the global function from utils.py
+    if convert_to_linear:
+        img = srgb_to_linear(img)  # Use the global function from utils.py
     return img
 
 def readImages(renders_dir):
@@ -52,10 +53,10 @@ def readImages(renders_dir):
             image_names.append(base_name)
 
     for name in image_names:
-        renders["rgb"].append(read_img(os.path.join(renders_dir, f"{name}.png")))
-        renders["albedo"].append(read_img(os.path.join(renders_dir, f"{name}_albedo.png")))
-        renders["roughness"].append(read_img(os.path.join(renders_dir, f"{name}_roughness.png")))
-        renders["normal"].append(read_img(os.path.join(renders_dir, f"{name}_normal.png")))
+        renders["rgb"].append(read_img(os.path.join(renders_dir, f"{name}.png"), convert_to_linear=True)) # read_img func will convert the image to np array
+        renders["albedo"].append(read_img(os.path.join(renders_dir, f"{name}_albedo.png"), convert_to_linear=True))
+        renders["roughness"].append(read_img(os.path.join(renders_dir, f"{name}_roughness.png"), convert_to_linear=True))
+        renders["normal"].append(read_img(os.path.join(renders_dir, f"{name}_normal.png"), convert_to_linear=True)) #normal.png is in srgb space
     
     return renders
 
@@ -91,7 +92,7 @@ def to_torch_image(img):
 def metrics_training_envmap():
     dataset = Dataset(args.dataset_path, RENDER_UPSAMPLE_ITER, "test")
 
-    renders = readImages(OUTPUT_RENDER_DIR)
+    renders = readImages(OUTPUT_RENDER_DIR) # all images will convert to linear space， except rgb images
 
     metrics = {
         "psnr_rgb": [],
@@ -124,20 +125,25 @@ def metrics_training_envmap():
         ref_albedo    = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
         ref_roughness = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]]
 
-        #TODO: temporarily use a mask to exclude the black pixels
-        mask = (ref_rgb != 0)
-        rgb_img       = dr.select(mask, rgb_img, 0.0)
-        albedo_img    = dr.select(mask, albedo_img, 0.0)
-        roughness_img = dr.select(mask, roughness_img, 0.0)
-        normal_img    = dr.select(mask, normal_img, 0.0)
+        ref_rgb = np.asarray(ref_rgb, dtype=np.float32)
+        ref_albedo = np.asarray(ref_albedo, dtype=np.float32)
+        ref_roughness = np.asarray(ref_roughness, dtype=np.float32)
 
-        psnr_rgb_val = lpsnr(ref_rgb, rgb_img)
-        ssim_rgb_val = lssim(ref_rgb, rgb_img)
+        #TODO: temporarily use ref albedo as a mask to exclude the black pixels, follow IRGS
+        mask = np.any(ref_albedo != 0, axis=-1)
+        mask = mask[..., None]
+        rgb_img       = np.where(mask, rgb_img, 0.0)
+        albedo_img    = np.where(mask, albedo_img, 0.0)
+        roughness_img = np.where(mask, roughness_img, 0.0)
+        normal_img    = np.where(mask, normal_img, 0.0)
+
+        psnr_rgb_val = lpsnr(ref_rgb, rgb_img, convert_to_srgb=True)
+        ssim_rgb_val = lssim(ref_rgb, rgb_img, convert_to_srgb=True)
 
         psnr_alb_val = lpsnr(ref_albedo, albedo_img)
         ssim_alb_val = lssim(ref_albedo, albedo_img)
         
-        l2_rough_val = l2(ref_roughness, roughness_img).numpy()
+        l2_rough_val = l2_np(ref_roughness, roughness_img)
        
         metrics["psnr_rgb"].append(psnr_rgb_val)
         metrics["ssim_rgb"].append(ssim_rgb_val)
@@ -163,6 +169,10 @@ def metrics_training_envmap():
 
         if args.dataset_type == "TensoIR":
             ref_normal    = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
+            ref_normal = np.asarray(ref_normal, dtype=np.float32)
+
+            normal_img = np.where(mask, (normal_img * 2.0 - 1.0), 0.0)
+            
             normal_mask = np.any(ref_normal != 0, axis=2, keepdims=True)
             lmae_norm_val = lmae(ref_normal, normal_img, normal_mask.squeeze())
             metrics["lmae_normal"].append(lmae_norm_val)
@@ -253,8 +263,8 @@ def metrics_relighting_envmap(envmap_name):
         rgb_img       = renders["rgb"][idx][:, :, :3]
         ref_rgb       = dataset.ref_relight_images[envmap_name][idx]
 
-        psnr_rgb_val = lpsnr(ref_rgb, rgb_img)
-        ssim_rgb_val = lssim(ref_rgb, rgb_img)
+        psnr_rgb_val = lpsnr(ref_rgb, rgb_img, convert_to_srgb=True)
+        ssim_rgb_val = lssim(ref_rgb, rgb_img, convert_to_srgb=True)
 
         metrics["psnr_rgb"].append(psnr_rgb_val)
         metrics["ssim_rgb"].append(ssim_rgb_val)

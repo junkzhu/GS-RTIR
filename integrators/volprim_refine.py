@@ -162,10 +162,10 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                 color = weight_det * sh_color
                 color[~dr.isfinite(color)] = 0.0
 
-                normal[active] = weight_det * normals_val
+                normal[active] = weight * normals_val
                 normal[~dr.isfinite(normal)] = 0.0
 
-                depth[active] = weight * depth_acc
+                depth[active] = weight_det * depth_acc
                 depth[~dr.isfinite(depth)] = 0.0
 
             A[active] = (A + color) if primal else (A - color)

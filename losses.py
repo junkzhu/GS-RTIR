@@ -5,11 +5,16 @@ import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
 from math import exp
+from utils import linear_to_srgb
 
-def l1(reference, image):
+def l1(reference, image, convert_to_srgb=False):
     '''
     L1 loss function
     '''
+    if convert_to_srgb:
+        reference = dr.linear_to_srgb(reference)
+        image = dr.linear_to_srgb(image)
+
     return dr.mean(dr.abs(reference - image), axis=None)
 
 def l2(reference, image):
@@ -18,7 +23,13 @@ def l2(reference, image):
     '''
     return dr.mean(dr.power(reference - image, 2), axis=None)
 
-def lpsnr(reference, image):
+def l2_np(reference, image):
+    '''
+    L2 loss function
+    '''
+    return np.mean(np.power(reference - image, 2), axis=None)
+
+def lpsnr(reference, image, convert_to_srgb=False):
     '''
     PSNR loss function
     '''
@@ -28,8 +39,9 @@ def lpsnr(reference, image):
     reference = np.clip(reference, 0.0, None)
     image = np.clip(image, 0.0, None)
 
-    reference = reference**(1/2.2)
-    image = image**(1/2.2)
+    if convert_to_srgb:
+        reference = linear_to_srgb(reference)
+        image = linear_to_srgb(image)
 
     mse = np.mean((reference - image)**2)
     return -10.0 * np.log(mse) / np.log(10.0)
@@ -83,10 +95,15 @@ def create_window(window_size, channel):
     window = Variable(_2D_window.expand(channel, 1, window_size, window_size).contiguous())
     return window
 
-def lssim(img1, img2, window_size=11, size_average=True):
+def lssim(img1, img2, window_size=11, size_average=True, convert_to_srgb=False):
     
     img1 = np.asarray(img1, dtype=np.float32)
     img2 = np.asarray(img2, dtype=np.float32)
+    
+    if convert_to_srgb:
+        img1 = linear_to_srgb(img1)
+        img2 = linear_to_srgb(img2)
+
     img1 = torch.from_numpy(img1).permute(2, 0, 1).unsqueeze(0).float()
     img2 = torch.from_numpy(img2).permute(2, 0, 1).unsqueeze(0).float()
 

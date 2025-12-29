@@ -556,8 +556,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         N = N / dr.maximum(weight_acc, 1e-8)
 
         # Trick: srgb -> linear is much easier to optimize, follow 3dgs
-        R = mi.math.srgb_to_linear(R) 
-        A = mi.math.srgb_to_linear(A)
+        #R = mi.math.srgb_to_linear(R) 
+        #A = mi.math.srgb_to_linear(A)
 
         # ray active
         rand = sampler.next_1d()

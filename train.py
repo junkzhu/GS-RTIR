@@ -242,7 +242,7 @@ def compute_losses(img, aovs, ref_img, idx, sensor, dataset, opt, kdtree_idx, i)
     normal_priors_img = dataset.normal_priors_images[idx][sensor.film().crop_size()[0]]
 
     # Compute view loss
-    view_loss = l1(img, ref_img) / dataset.batch_size
+    view_loss = l1(img, ref_img, convert_to_srgb=True) / dataset.batch_size
 
     # Compute priors losses
     albedo_priors_loss = l2(albedo_img, albedo_priors_img) / dataset.batch_size
@@ -285,12 +285,12 @@ def save_render_results(i, idx, img, ref_img, albedo_img, roughness_img, depth_i
     depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
     normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img + 1.0)/2 , 0))), dataset.target_res)
 
-    mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}' + ('.png')), rgb_bmp)
-    mi.util.write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}_ref' + ('.png')), rgb_ref_bmp)
-    mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_albedo' + ('.png')), albedo_bmp)
-    mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_roughness' + ('.png')), roughness_bmp)
-    mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
-    mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)
+    write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}' + ('.png')), rgb_bmp)
+    write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}_ref' + ('.png')), rgb_ref_bmp)
+    write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_albedo' + ('.png')), albedo_bmp)
+    write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_roughness' + ('.png')), roughness_bmp)
+    write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
+    write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)
             
     # Save direct/indirect light if available
     if args.separate_direct_indirect and 'direct_light' in aovs and 'indirect_light' in aovs:
@@ -300,12 +300,12 @@ def save_render_results(i, idx, img, ref_img, albedo_img, roughness_img, depth_i
         direct_light_bmp = resize_img(mi.Bitmap(direct_light_img), dataset.target_res)
         indirect_light_bmp = resize_img(mi.Bitmap(indirect_light_img), dataset.target_res)
         
-        mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_direct_light' + ('.png')), direct_light_bmp)
-        mi.util.write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_indirect_light' + ('.png')), indirect_light_bmp)
+        write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_direct_light' + ('.png')), direct_light_bmp)
+        write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_indirect_light' + ('.png')), indirect_light_bmp)
 
 def compute_metrics(img, ref_img, aovs, dataset, sensor, idx, normal_mask):
     """Compute metrics (PSNR, MSE, MAE) for the current iteration"""
-    rgb_psnr = lpsnr(ref_img, img) / dataset.batch_size
+    rgb_psnr = lpsnr(ref_img, img, convert_to_srgb=True) / dataset.batch_size
     albedo_psnr = None
     roughness_mse = None
     normal_mae = None
@@ -337,7 +337,7 @@ def save_iteration_results(i, scene_dict, params, train_conf, loss_list, rgb_PSN
         else:
             envmap_data = params['envmap.data']
             envmap_img = mi.Bitmap(envmap_data)
-            mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.png')), envmap_img)
+            mi.util.write_bitmap(join(OUTPUT_ENVMAP_DIR, f'{i:04d}' + ('.exr')), envmap_img)
 
     # Save plots and PLY files at specified iterations
     if (i in dataset.render_upsample_iter) or i == train_conf.optimizer.iterations - 1:

@@ -7,7 +7,7 @@
 # CUDA_VISIBLE_DEVICES=0 python metrics.py --dataset_type Synthetic4Relight --dataset_name jugs --dataset_path /home/zjk/datasets/Synthetic4Relight/jugs --envmap_root /home/zjk/datasets/Synthetic4Relight/Environment_Maps --relight
 
 # Configuration variables
-CUDA_DEVICE="1"
+CUDA_DEVICE="3"
 DATASET_TYPE="Synthetic4Relight"
 DATASET_ROOT="/home/zjk/datasets/Synthetic4Relight"
 OUTPUT_ROOT="/home/zjk/code/GS-RTIR/outputs/Synthetic4Relight"
@@ -16,10 +16,10 @@ ITERATION="299"  # Default iteration number, can be overridden by command line a
 
 # Enable/disable switches for each step
 enable_refine=false
-enable_train=true
-enable_render=true
+enable_train=false
+enable_render=false
 enable_metrics=true
-enable_relight=true  # Switch for relight functionality
+enable_relight=false  # Switch for relight functionality
 
 # Scene-specific parameters
 declare -A SCENE_PARAMS

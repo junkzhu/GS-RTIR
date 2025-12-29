@@ -204,7 +204,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
         ref_images = list(
             executor.map(
-                lambda fn: load_mipmaps(fn),
+                lambda fn: load_mipmaps(fn, True),
                 image_paths
             )
         )
@@ -218,7 +218,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
 
         ref_normal_images = list(
             executor.map(
-                lambda fn: load_mipmaps(fn, False, normalize=True, mitsuba_axis=True),
+                lambda fn: load_mipmaps(fn, False, normalize=True, mitsuba_axis=False),
                 normal_paths
             )
         )
@@ -402,7 +402,7 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
         image_paths.append(str(img_path.resolve()))
 
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-        ref_images = list(executor.map(load_mipmaps, image_paths))
+        ref_images = list(executor.map(lambda fn: load_mipmaps(fn, True), image_paths))
 
     ref_albedo_images=[]
     ref_roughness_images=[]
@@ -412,7 +412,7 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
         roughness_paths = [path.replace('_rgba.png', '_rough.png') for path in image_paths]
 
         with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-            ref_albedo_images = list(executor.map(lambda fn: load_mipmaps(fn, False), albedo_paths))
+            ref_albedo_images = list(executor.map(lambda fn: load_mipmaps(fn, True), albedo_paths))
             ref_roughness_images = list(executor.map(lambda fn: load_mipmaps(fn, False), roughness_paths))
 
     # relight images

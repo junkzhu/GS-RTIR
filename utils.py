@@ -13,6 +13,11 @@ import os
 from pathlib import Path
 from constants import *
 
+def write_bitmap(path, img, keep_gamma=False):
+    if keep_gamma:
+        img = srgb_to_linear(img)
+    mi.util.write_bitmap(path, img)
+
 def srgb_to_linear(img, clip=True):
     img = np.asarray(img, dtype=np.float32)
 

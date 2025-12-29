@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from collections import defaultdict
 import drjit as dr
 import mitsuba as mi
+import numpy as np
 from typing import (
     Any,
     Generic,

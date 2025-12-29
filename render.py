@@ -107,9 +107,9 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
 
         relight_pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc=f"Relighting {envmap_name}")
         for idx, sensor in relight_pbar:
-            img, _ = mi.render(scene_dict, params=params, sensor=sensor, spp=args.render_spp)
+            img, _ = mi.render(scene_dict, params=params, sensor=sensor, spp=args.render_spp) #img is linear space
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
-            mi.util.write_bitmap(join(envmap_dir, f'{idx:02d}' + ('.png')), rgb_bmp)
+            write_bitmap(join(envmap_dir, f'{idx:02d}' + ('.png')), rgb_bmp)
 
 def render_materials(dataset, scene_dict):
     albedo_list, ref_albedo_list = [], []
@@ -120,7 +120,7 @@ def render_materials(dataset, scene_dict):
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Rendering views")
 
     for idx, sensor in pbar:
-        img, aovs = mi.render(scene_dict, sensor=sensor, spp=args.render_spp)
+        img, aovs = mi.render(scene_dict, sensor=sensor, spp=args.render_spp) #img is linear space
 
         #aovs
         albedo_img = aovs['albedo'][:, :, :3]
@@ -135,15 +135,15 @@ def render_materials(dataset, scene_dict):
         #metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
         normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img+1)/2, 0))), dataset.target_res) 
 
-        
-        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)
-        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo_ref' + ('.png')), dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]])
 
-        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_roughness' + ('.png')), roughness_bmp)
-        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_roughness_ref' + ('.png')), dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]])
+        write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo_ori' + ('.png')), albedo_bmp)
+        write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo_ref' + ('.png')), dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]])
 
-        #mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_metallic' + ('.png')), metallic_bmp)
-        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_normal' + ('.png')), normal_bmp)
+        write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_roughness' + ('.png')), roughness_bmp)
+        write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_roughness_ref' + ('.png')), dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]])
+
+        #write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_metallic' + ('.png')), metallic_bmp)
+        write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_normal' + ('.png')), normal_bmp)
 
         if args.separate_direct_indirect:
             direct_light_img = aovs['direct_light'][:, :, :3]
@@ -152,15 +152,17 @@ def render_materials(dataset, scene_dict):
             direct_light_bmp = resize_img(mi.Bitmap(direct_light_img),dataset.target_res)
             indirect_light_bmp = resize_img(mi.Bitmap(indirect_light_img),dataset.target_res)
 
-            mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_direct_light' + ('.png')), direct_light_bmp)
-            mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_indirect_light' + ('.png')), indirect_light_bmp)
+            write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_direct_light' + ('.png')), direct_light_bmp)
+            write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_indirect_light' + ('.png')), indirect_light_bmp)
 
         albedo_list.append(albedo_bmp)
         ref_albedo_list.append(dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]])
 
         rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
-        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}' + ('.png')), rgb_bmp)
-        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_ref' + ('.png')), dataset.ref_images[idx][sensor.film().crop_size()[0]])
+        write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}' + ('.png')), rgb_bmp)
+        write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_ref' + ('.png')), dataset.ref_images[idx][sensor.film().crop_size()[0]])
+        if idx == 0:
+            break
 
     single_channel_ratio, three_channel_ratio = compute_rescale_ratio(ref_albedo_list, albedo_list)
     print("Albedo scale:", three_channel_ratio)
@@ -170,7 +172,7 @@ def render_materials(dataset, scene_dict):
         albedo_img = three_channel_ratio * mi.TensorXf(albedo_bmp)
         albedo_bmp = mi.Bitmap(albedo_img)
 
-        mi.util.write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)
+        write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)
 
     return three_channel_ratio
 
