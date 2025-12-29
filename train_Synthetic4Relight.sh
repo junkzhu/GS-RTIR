@@ -19,7 +19,7 @@ enable_refine=false
 enable_train=true
 enable_render=true
 enable_metrics=true
-enable_relight=true  # Switch for relight functionality
+enable_relight=false  # Switch for relight functionality
 
 # Scene-specific parameters
 declare -A SCENE_PARAMS

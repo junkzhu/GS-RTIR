@@ -161,8 +161,6 @@ def render_materials(dataset, scene_dict):
         rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
         write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}' + ('.png')), rgb_bmp)
         write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_ref' + ('.png')), dataset.ref_images[idx][sensor.film().crop_size()[0]])
-        if idx == 0:
-            break
 
     single_channel_ratio, three_channel_ratio = compute_rescale_ratio(ref_albedo_list, albedo_list)
     print("Albedo scale:", three_channel_ratio)

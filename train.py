@@ -319,6 +319,10 @@ def compute_metrics(img, ref_img, aovs, dataset, sensor, idx, normal_mask):
         ref_roughness = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]]
         ref_normal = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
 
+        # _, three_channel_ratio = compute_rescale_ratio([ref_albedo], [albedo_img])
+        # albedo_img = three_channel_ratio * albedo_img
+        # albedo_img = mi.Bitmap(albedo_img)
+
         albedo_psnr = lpsnr(ref_albedo, albedo_img) / dataset.batch_size
         roughness_mse = l2(ref_roughness, roughness_img) / dataset.batch_size
         normal_mae = lmae(ref_normal, normal_img, normal_mask.squeeze()) / dataset.batch_size

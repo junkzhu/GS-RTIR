@@ -56,7 +56,7 @@ def get_args():
     parser.add_argument("--envmap_path", default="/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k/sunset.hdr", help="The path to the environment map.")
     
     parser.add_argument("--spherical_gaussian", type=str2bool, default=True, help="Enable spherical gaussian.")
-    parser.add_argument("--num_sgs", type=int, default=16, help="The number of spherical gaussians.")
+    parser.add_argument("--num_sgs", type=int, default=8, help="The number of spherical gaussians.")
 
     #-------------- render & metrics --------------
     parser.add_argument("--render_spp", type=int, default=128, help="The number of samples per pixel for rendering.")
