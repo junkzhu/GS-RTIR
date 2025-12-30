@@ -1,6 +1,10 @@
 通过网盘分享的文件：TensoIR.zip
 链接: https://pan.baidu.com/s/1sxG5vFs24gzOFAoLR-fdQQ?pwd=vapz 提取码: vapz
 
+单个armadillo数据集： （建议使用，小一点..）
+链接: https://pan.baidu.com/s/1cAjMdc3vL0H6yju9VHHueA?pwd=va9j 提取码: va9j 
+
+
 使用方法..(ai写的)
 
 # Usage
