@@ -3,11 +3,11 @@ print_stats: true
 densify:
   frequency: 20
   start_iteration: 0
-  end_iteration: 1000
-  clone_grad_threshold: 0.0002
+  end_iteration: 400
+  clone_grad_threshold: 0.0001
   split_grad_threshold: 1e8
   split_extreme_shape_grad_threshold: 1e8
-  relative_size_threshold: 0.01
+  relative_size_threshold: 0.2
   split_n_gaussians: 2
 
   anisotropy_threshold: 3.0

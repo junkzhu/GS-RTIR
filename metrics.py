@@ -52,7 +52,10 @@ def readImages(renders_dir):
         if base_name not in image_names:
             image_names.append(base_name)
 
-    for name in image_names:
+    for idx, name in enumerate(image_names):
+        real_idx = idx * args.stride
+        name = f"{real_idx:02d}"
+
         renders["rgb"].append(read_img(os.path.join(renders_dir, f"{name}.png"), convert_to_linear=True)) # read_img func will convert the image to np array
         renders["albedo"].append(read_img(os.path.join(renders_dir, f"{name}_albedo.png"), convert_to_linear=True))
         renders["roughness"].append(read_img(os.path.join(renders_dir, f"{name}_roughness.png"), convert_to_linear=True))
@@ -116,10 +119,14 @@ def metrics_training_envmap():
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Metrics")
 
     for idx, sensor in pbar:
-        rgb_img       = renders["rgb"][idx][:, :, :3]
-        albedo_img    = renders["albedo"][idx][:, :, :3]
-        roughness_img = renders["roughness"][idx][:, :, :3]
-        normal_img    = renders["normal"][idx][:, :, :3]
+        if idx % args.stride != 0:
+            continue
+        real_idx = int(idx / args.stride)
+
+        rgb_img       = renders["rgb"][real_idx][:, :, :3]
+        albedo_img    = renders["albedo"][real_idx][:, :, :3]
+        roughness_img = renders["roughness"][real_idx][:, :, :3]
+        normal_img    = renders["normal"][real_idx][:, :, :3]
 
         ref_rgb       = dataset.ref_images[idx][sensor.film().crop_size()[0]]
         ref_albedo    = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
@@ -260,8 +267,12 @@ def metrics_relighting_envmap(envmap_name):
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Relighting Metrics")
 
     for idx, sensor in pbar:
-        rgb_img       = renders["rgb"][idx][:, :, :3]
-        ref_rgb       = dataset.ref_relight_images[envmap_name][idx]
+        if idx % args.stride != 0:
+            continue
+        real_idx = int(idx / args.stride)
+
+        rgb_img       = renders["rgb"][real_idx][:, :, :3]
+        ref_rgb       = dataset.ref_relight_images[envmap_name][real_idx]
 
         psnr_rgb_val = lpsnr(ref_rgb, rgb_img, convert_to_srgb=True)
         ssim_rgb_val = lssim(ref_rgb, rgb_img, convert_to_srgb=True)

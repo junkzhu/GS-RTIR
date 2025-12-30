@@ -61,6 +61,7 @@ def get_args():
     #-------------- render & metrics --------------
     parser.add_argument("--render_spp", type=int, default=128, help="The number of samples per pixel for rendering.")
     parser.add_argument("--envmap_init_path", help="The path to the initial environment map npy.")
+    parser.add_argument("--stride", type=int, default=1, help="The stride for rendering.")
 
     #-------------- relight --------------
     parser.add_argument("--relight", action="store_true", help="Whether to relight the scene.")

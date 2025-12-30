@@ -158,7 +158,7 @@ class GSStrategyModel:
         + (grad_quat ** 2).sum(dim=1)
         + (grad_opacity ** 2).sum(dim=1)
         + (grad_sh ** 2).sum(dim=1)
-        + (grad_normal ** 2).sum(dim=1)
+        + 1e2 * (grad_normal ** 2).sum(dim=1)
         )
 
         self.grad_norm = grad_norm

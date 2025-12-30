@@ -7,7 +7,7 @@
 # CUDA_VISIBLE_DEVICES=0 python metrics.py --dataset_type TensoIR --dataset_name lego --dataset_path /home/zjk/datasets/TensoIR/lego --envmap_root /home/zjk/datasets/TensoIR/Environment_Maps --relight
 
 # Configuration variables
-CUDA_DEVICE="0"
+CUDA_DEVICE="0"  # Default CUDA device, can be overridden by --cuda_device argument
 DATASET_TYPE="TensoIR"
 DATASET_ROOT="/home/zjk/datasets/TensoIR"
 OUTPUT_ROOT="/home/zjk/code/GS-RTIR/outputs/TensoIR"
@@ -26,8 +26,8 @@ declare -A SCENE_PARAMS
 SCENE_PARAMS[lego,offset]="0.1"
 SCENE_PARAMS[lego,geometry_threshold]="0.2"
 
-SCENE_PARAMS[hotdog,offset]="0.05"
-SCENE_PARAMS[hotdog,geometry_threshold]="0.3"
+SCENE_PARAMS[hotdog,offset]="0.1"
+SCENE_PARAMS[hotdog,geometry_threshold]="0.2"
 
 SCENE_PARAMS[armadillo,offset]="0.1"
 SCENE_PARAMS[armadillo,geometry_threshold]="0.3"
@@ -156,23 +156,45 @@ run_all() {
 }
 
 # Parse command line arguments
-# Check if the first argument is a number (iteration)
-if [[ "$1" =~ ^[0-9]+$ ]]; then
-    ITERATION="$1"
-    shift  # Remove the iteration argument from the list
-fi
+# Separate scene names from option arguments
+scene_names=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --cuda_device)
+            CUDA_DEVICE="$2"
+            echo "Using CUDA device: $CUDA_DEVICE"
+            shift 2
+            ;;
+        --iteration)
+            ITERATION="$2"
+            echo "Using iteration: $ITERATION"
+            shift 2
+            ;;
+        *)
+            # Check if it's a number (old iteration syntax support)
+            if [[ "$1" =~ ^[0-9]+$ ]]; then
+                ITERATION="$1"
+                echo "Using iteration: $ITERATION"
+            else
+                # Add to scene names list
+                scene_names+=($1)
+            fi
+            shift
+            ;;
+    esac
+done
 
 # Main execution
-if [ $# -eq 0 ]; then
-    # Run all scenes if no arguments provided
-    echo "Running all scenes with iteration $ITERATION..."
+if [ ${#scene_names[@]} -eq 0 ]; then
+    # Run all scenes if no scene names provided
+    echo "Running all scenes with CUDA device $CUDA_DEVICE and iteration $ITERATION..."
     for scene in lego hotdog armadillo ficus; do
         run_all $scene
     done
 else
     # Run only specified scenes
-    echo "Running specified scenes: $@ with iteration $ITERATION..."
-    for scene in "$@"; do
+    echo "Running specified scenes: ${scene_names[@]} with CUDA device $CUDA_DEVICE and iteration $ITERATION..."
+    for scene in "${scene_names[@]}"; do
         run_all $scene
     done
 fi

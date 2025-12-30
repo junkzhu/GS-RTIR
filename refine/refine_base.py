@@ -154,6 +154,9 @@ class RefineBase:
                                       spp=args.refine_spp, spp_grad=1,
                                       seed=self.seed, seed_grad=self.seed+1+len(self.dataset.sensors))
                 
+                dr.eval(img)
+                dr.eval(aovs)
+
                 self.seed += 1 + len(self.dataset.sensors)
                 
                 ref_img = self.dataset.ref_images[idx][sensor.film().crop_size()[0]]

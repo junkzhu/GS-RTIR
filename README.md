@@ -53,13 +53,29 @@ enable_relight=true  # Switch for relight functionality
 - `enable_metrics`: Whether to compute evaluation metrics
 - `enable_relight`: Whether to enable relight functionality
 
-## Multiple Instances
-You can run multiple debug instances simultaneously, each with its own output folder:
+## CUDA Device Selection
+You can specify which CUDA device to use with the `--cuda_device` parameter:
 
 ```bash
-# Run two instances of lego training simultaneously
-./train_TensoIR.sh lego2
-./train_TensoIR.sh lego3
+# Train on CUDA device 0
+./train_TensoIR.sh lego --cuda_device 0
+
+# Train on CUDA device 3 with a specific iteration
+./train_TensoIR.sh hotdog --cuda_device 3 --iteration 100
+
+# Same syntax works for Synthetic4Relight dataset
+./train_Synthetic4Relight.sh jugs --cuda_device 1
+```
+
+The parameter works regardless of its position in the command line. If not specified, the default CUDA device (0) will be used.
+
+## Multiple Instances
+You can run multiple debug instances simultaneously, each with its own output folder and CUDA device:
+
+```bash
+# Run two instances on different CUDA devices
+./train_TensoIR.sh lego2 --cuda_device 0
+./train_TensoIR.sh lego3 --cuda_device 1
 ```
 
 The system automatically identifies the base scene name (e.g., lego) and uses the numeric suffix (e.g., 2, 3) to create unique output directories.

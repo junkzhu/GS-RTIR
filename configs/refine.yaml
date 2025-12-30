@@ -10,5 +10,5 @@ optimizer:
 
   scheduler:
     type: cosine
-    min_factor: 0.1
+    min_factor: 1.0
 

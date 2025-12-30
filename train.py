@@ -380,6 +380,9 @@ def train_loop(train_conf, dataset, gaussians, kdtree_idx, gsstrategy, scene_dic
                                   spp=args.training_spp * args.primal_spp_mult, spp_grad=args.training_spp,
                                   seed=seed, seed_grad=seed + 1 + len(dataset.sensors))
             
+            dr.eval(img)
+            dr.eval(aovs)
+
             seed += 1 + len(dataset.sensors)
 
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]

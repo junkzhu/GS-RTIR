@@ -7,12 +7,12 @@
 # CUDA_VISIBLE_DEVICES=0 python metrics.py --dataset_type Synthetic4Relight --dataset_name jugs --dataset_path /home/zjk/datasets/Synthetic4Relight/jugs --envmap_root /home/zjk/datasets/Synthetic4Relight/Environment_Maps --relight
 
 # Configuration variables
-CUDA_DEVICE="1"
+CUDA_DEVICE="1"  # Default CUDA device, can be overridden by --cuda_device argument
 DATASET_TYPE="Synthetic4Relight"
 DATASET_ROOT="/home/zjk/datasets/Synthetic4Relight"
 OUTPUT_ROOT="/home/zjk/code/GS-RTIR/outputs/Synthetic4Relight"
 ENVIRONMENT_MAPS="/home/zjk/datasets/Synthetic4Relight/Environment_Maps"
-ITERATION="299"  # Default iteration number, can be overridden by command line argument
+ITERATION="299"  # Default iteration number, can be overridden by --iteration argument
 
 # Enable/disable switches for each step
 enable_refine=false
@@ -33,7 +33,7 @@ SCENE_PARAMS[air_baloons,offset]="0.3"
 SCENE_PARAMS[air_baloons,geometry_threshold]="0.3"
 
 SCENE_PARAMS[hotdog,offset]="0.1"
-SCENE_PARAMS[hotdog,geometry_threshold]="0.3"
+SCENE_PARAMS[hotdog,geometry_threshold]="0.2"
 
 # Function to run refine for a scene
 run_refine() {
@@ -156,23 +156,39 @@ run_all() {
 }
 
 # Parse command line arguments
-# Check if the first argument is a number (iteration)
-if [[ "$1" =~ ^[0-9]+$ ]]; then
-    ITERATION="$1"
-    shift  # Remove the iteration argument from the list
-fi
+# Initialize scene_names array to hold scene names
+scene_names=()
+
+# Parse all arguments to separate options and scene names
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --cuda_device)
+            CUDA_DEVICE="$2"
+            shift 2
+            ;;
+        --iteration)
+            ITERATION="$2"
+            shift 2
+            ;;
+        *)
+            # This is a scene name, add to scene_names array
+            scene_names+=($1)
+            shift
+            ;;
+    esac
+done
 
 # Main execution
-if [ $# -eq 0 ]; then
-    # Run all scenes if no arguments provided
-    echo "Running all scenes with iteration $ITERATION..."
+if [ ${#scene_names[@]} -eq 0 ]; then
+    # Run all scenes if no scene names provided
+    echo "Running all scenes with CUDA device $CUDA_DEVICE and iteration $ITERATION..."
     for scene in jugs chair air_baloons hotdog; do
         run_all $scene
     done
 else
     # Run only specified scenes
-    echo "Running specified scenes: $@ with iteration $ITERATION..."
-    for scene in "$@"; do
+    echo "Running specified scenes: ${scene_names[@]} with CUDA device $CUDA_DEVICE and iteration $ITERATION..."
+    for scene in "${scene_names[@]}"; do
         run_all $scene
     done
 fi

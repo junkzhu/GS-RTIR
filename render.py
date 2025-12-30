@@ -107,6 +107,9 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
 
         relight_pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc=f"Relighting {envmap_name}")
         for idx, sensor in relight_pbar:
+            if idx % args.stride != 0:
+                continue
+            
             img, _ = mi.render(scene_dict, params=params, sensor=sensor, spp=args.render_spp) #img is linear space
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
             write_bitmap(join(envmap_dir, f'{idx:02d}' + ('.png')), rgb_bmp)
@@ -120,6 +123,9 @@ def render_materials(dataset, scene_dict):
     pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc="Rendering views")
 
     for idx, sensor in pbar:
+        if idx % args.stride != 0:
+            continue
+
         img, aovs = mi.render(scene_dict, sensor=sensor, spp=args.render_spp) #img is linear space
 
         #aovs
@@ -166,11 +172,13 @@ def render_materials(dataset, scene_dict):
     print("Albedo scale:", three_channel_ratio)
 
     for idx, albedo_img in enumerate(albedo_list):
+        real_idx = idx * args.stride
+
         albedo_bmp = albedo_img.convert(mi.Bitmap.PixelFormat.RGB, mi.Struct.Type.Float32)
         albedo_img = three_channel_ratio * mi.TensorXf(albedo_bmp)
         albedo_bmp = mi.Bitmap(albedo_img)
 
-        write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_albedo' + ('.png')), albedo_bmp)
+        write_bitmap(join(OUTPUT_RENDER_DIR, f'{real_idx:02d}_albedo' + ('.png')), albedo_bmp)
 
     return three_channel_ratio
 
