@@ -76,7 +76,7 @@ def read_RGB_images(renders_dir):
         image_paths.append(fname)
 
     for image_path in image_paths:
-        renders["rgb"].append(read_img(os.path.join(renders_dir, image_path)))
+        renders["rgb"].append(read_img(os.path.join(renders_dir, image_path), convert_to_linear=True))
     
     return renders
 
@@ -272,8 +272,8 @@ def metrics_relighting_envmap(envmap_name):
         real_idx = int(idx / args.stride)
 
         rgb_img       = renders["rgb"][real_idx][:, :, :3]
-        ref_rgb       = dataset.ref_relight_images[envmap_name][real_idx]
-
+        ref_rgb       = dataset.ref_relight_images[envmap_name][idx]
+        
         psnr_rgb_val = lpsnr(ref_rgb, rgb_img, convert_to_srgb=True)
         ssim_rgb_val = lssim(ref_rgb, rgb_img, convert_to_srgb=True)
 

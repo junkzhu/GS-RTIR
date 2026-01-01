@@ -39,7 +39,7 @@ class Dataset:
         self.roughness_priors_images = {}
         self.normal_priors_images = {}
 
-        self.relight_envmap_names = get_relighting_envmap_names(args.envmap_root)
+        self.relight_envmap_names = [env]
         self.ref_relight_images = defaultdict(list)
 
         self.target_res = [800,800]

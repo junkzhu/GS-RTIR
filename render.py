@@ -1,6 +1,7 @@
 import torch
 import tqdm
 import numpy as np
+import os
 from os.path import join
 from pathlib import Path
 
@@ -110,9 +111,14 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
             if idx % args.stride != 0:
                 continue
             
+            # Check if the image already exists
+            output_path = join(envmap_dir, f'{idx:02d}.png')
+            if os.path.exists(output_path):
+                continue  # Skip if image already exists
+            
             img, _ = mi.render(scene_dict, params=params, sensor=sensor, spp=args.render_spp) #img is linear space
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
-            write_bitmap(join(envmap_dir, f'{idx:02d}' + ('.png')), rgb_bmp)
+            write_bitmap(output_path, rgb_bmp)
 
 def render_materials(dataset, scene_dict):
     albedo_list, ref_albedo_list = [], []

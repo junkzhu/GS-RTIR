@@ -27,8 +27,11 @@ def load_bitmap(fn, bsrgb2linear = True, normalize = False, mitsuba_axis = False
         rgb = rgb * 2 -1
 
         if mitsuba_axis:
-            rgb[..., 0] = -rgb[..., 0]
-            rgb[..., 2] = -rgb[..., 2]
+            if "genprior" in fn: # blender -> mitsuba
+                rgb[..., 2] = -rgb[..., 2]
+            if "rgb2x" in fn: # colmap -> mitsuba                 
+                rgb[..., 0] = -rgb[..., 0]
+                rgb[..., 2] = -rgb[..., 2]
         
         norm = np.linalg.norm(rgb, axis=-1, keepdims=True)
         img = rgb / np.maximum(norm, 1e-8) * alpha
@@ -249,9 +252,15 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
     roughness_priors_images=[]
     normal_priors_images=[]
 
-    albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset.png') for path in image_paths]
-    roughness_priors_paths = [path.replace('rgba_sunset.png', 'roughness_sunset.png') for path in image_paths]
-    normal_priors_paths = [path.replace('rgba_sunset.png', 'normal_sunset.png') for path in image_paths]
+    if args.diffusion_model == "rgb2x":
+        albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset.png') for path in image_paths]
+        roughness_priors_paths = [path.replace('rgba_sunset.png', 'roughness_sunset.png') for path in image_paths]
+        normal_priors_paths = [path.replace('rgba_sunset.png', 'normal_sunset.png') for path in image_paths]
+    if args.diffusion_model == "genprior":
+        albedo_priors_paths = [path.replace('rgba_sunset.png', 'albedo_sunset_genprior.png') for path in image_paths]
+        roughness_priors_paths = [path.replace('rgba_sunset.png', 'roughness_sunset_genprior.png') for path in image_paths]
+        normal_priors_paths = [path.replace('rgba_sunset.png', 'normal_sunset_genprior.png') for path in image_paths]
+
 
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
         albedo_priors_images = list(
@@ -448,9 +457,14 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
     roughness_priors_images=[]
     normal_priors_images=[]
 
-    albedo_priors_paths = [path.replace('.png', '_albedo_rgb2x.png') for path in image_paths]
-    roughness_priors_paths = [path.replace('.png', '_roughness_rgb2x.png') for path in image_paths]
-    normal_priors_paths = [path.replace('.png', '_normal_rgb2x.png') for path in image_paths]
+    if args.diffusion_model == "rgb2x":
+        albedo_priors_paths = [path.replace('.png', '_albedo_rgb2x.png') for path in image_paths]
+        roughness_priors_paths = [path.replace('.png', '_roughness_rgb2x.png') for path in image_paths]
+        normal_priors_paths = [path.replace('.png', '_normal_rgb2x.png') for path in image_paths]
+    if args.diffusion_model == "genprior":
+        albedo_priors_paths = [path.replace('.png', '_albedo_genprior.png') for path in image_paths]
+        roughness_priors_paths = [path.replace('.png', '_roughness_genprior.png') for path in image_paths]
+        normal_priors_paths = [path.replace('.png', '_normal_genprior.png') for path in image_paths]
 
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
         albedo_priors_images = list(executor.map(lambda fn: load_mipmaps(fn, True), albedo_priors_paths))
