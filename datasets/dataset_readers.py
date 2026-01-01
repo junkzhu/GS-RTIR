@@ -265,7 +265,7 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
         albedo_priors_images = list(
             executor.map(
-                lambda fn: load_mipmaps(fn, False),
+                lambda fn: load_mipmaps(fn, (args.diffusion_model == "rgb2x")),
                 albedo_priors_paths
             )
         )
@@ -467,7 +467,7 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
         normal_priors_paths = [path.replace('.png', '_normal_genprior.png') for path in image_paths]
 
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-        albedo_priors_images = list(executor.map(lambda fn: load_mipmaps(fn, True), albedo_priors_paths))
+        albedo_priors_images = list(executor.map(lambda fn: load_mipmaps(fn, (args.diffusion_model == "rgb2x")), albedo_priors_paths))
         roughness_priors_images = list(executor.map(lambda fn: load_mipmaps(fn, False), roughness_priors_paths))
         normal_priors_images = list(executor.map(lambda args: load_normal_prior_mipmaps(args, sensors, False, normalize=True, mitsuba_axis=True), enumerate(normal_priors_paths)))
 
