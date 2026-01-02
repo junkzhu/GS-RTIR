@@ -248,7 +248,7 @@ def compute_losses(img, aovs, ref_img, idx, sensor, dataset, opt, kdtree_idx, i)
     albedo_priors_loss = l2(albedo_img, albedo_priors_img) / dataset.batch_size
     roughness_priors_loss = l2(roughness_img, roughness_priors_img) / dataset.batch_size
     normal_priors_loss = l2(normal_img, normal_priors_img) / dataset.batch_size
-    priors_loss = 0.5 * albedo_priors_loss + roughness_priors_loss + normal_priors_loss
+    priors_loss = albedo_priors_loss + roughness_priors_loss + normal_priors_loss
 
     # Compute TV losses
     rgb_tv_loss = TV(ref_img, img) / dataset.batch_size
@@ -269,8 +269,8 @@ def compute_losses(img, aovs, ref_img, idx, sensor, dataset, opt, kdtree_idx, i)
 
     # Compute total loss with warmup weights
     total_loss = mi.TensorXf([0.0])
-    if i < 64: # warm up
-        total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.01 * tv_loss + 1e-5 * laplacian_loss + 0.1 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
+    if i < train_conf.optimizer.warmup_iterations: # warm up
+        total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.01 * tv_loss + 1e-5 * laplacian_loss + priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
     else:
         total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.01 * tv_loss + 0.05 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
 

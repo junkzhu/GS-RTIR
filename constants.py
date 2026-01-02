@@ -57,7 +57,7 @@ def get_args():
     parser.add_argument("--envmap_path", default="/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k/sunset.hdr", help="The path to the environment map.")
     
     parser.add_argument("--spherical_gaussian", type=str2bool, default=True, help="Enable spherical gaussian.")
-    parser.add_argument("--num_sgs", type=int, default=8, help="The number of spherical gaussians.")
+    parser.add_argument("--num_sgs", type=int, default=24, help="The number of spherical gaussians.")
 
     #-------------- render & metrics --------------
     parser.add_argument("--render_spp", type=int, default=128, help="The number of samples per pixel for rendering.")
@@ -79,8 +79,8 @@ REFINE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.sh_coe
 
 #-------------- upsample & save iter --------------=
 REFINE_UPSAMPLE_ITER = []
-TRAIN_UPSAMPLE_ITER = [64, 128, 256]
-SAVE_ENVMAP_ITER = [64, 128, 256]
+TRAIN_UPSAMPLE_ITER = [200, 400, 600]
+SAVE_ENVMAP_ITER = [200, 400, 600]
 RENDER_UPSAMPLE_ITER = []
 
 #--------------folder--------------

@@ -23,6 +23,7 @@ class RefineTensoIR(RefineBase):
     def __init__(self):
         """Initialize the refinement class"""
         super().__init__()
+        self.opacities_scale = 2.0
     
     def calculate_loss(self, idx, sensor, img, aovs, ref_img):
         """Calculate loss for TensoIR dataset"""
