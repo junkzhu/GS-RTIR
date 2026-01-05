@@ -267,6 +267,11 @@ def compute_losses(img, aovs, ref_img, idx, sensor, dataset, opt, kdtree_idx, i)
     roughness_laplacian_loss = ldiscrete_laplacian_reg_1dim(opt['roughnesses'], kdtree_idx) / dataset.batch_size
     laplacian_loss = albedo_laplacian_loss + roughness_laplacian_loss
 
+    # ref_albedo_img = dataset.ref_albedo_images[idx][sensor.film().crop_size()[0]]
+    # ref_roughness_img = dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]]
+    # l1_albedo_loss = l1(ref_albedo_img, albedo_img) / dataset.batch_size
+    # l1_roughness_loss = l1(ref_roughness_img, roughness_img) / dataset.batch_size
+
     # Compute total loss with warmup weights
     total_loss = mi.TensorXf([0.0])
     if i < train_conf.optimizer.warmup_iterations: # warm up

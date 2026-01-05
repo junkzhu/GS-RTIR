@@ -45,7 +45,7 @@ class RefineSynthetic4Relight(RefineBase):
         # Convert depth to fake normal and calculate loss
         fake_normal_img = convert_depth_to_normal(depth_img, sensor)
         normal_tv_loss = TV(normal_priors_img, normal_img) / self.dataset.batch_size
-        fake_normal_loss = lnormal_sqr(fake_normal_img, normal_img, normal_mask_flat) / self.dataset.batch_size
+        fake_normal_loss = lnormal_sqr(dr.detach(fake_normal_img), normal_img, normal_mask_flat) / self.dataset.batch_size
         
         # Total loss
         total_loss = view_loss + normal_priors_loss + normal_tv_loss + fake_normal_loss

@@ -12,7 +12,7 @@ DATASET_TYPE="Synthetic4Relight"
 DATASET_ROOT="/home/zjk/datasets/Synthetic4Relight"
 OUTPUT_ROOT="/home/zjk/code/GS-RTIR/outputs/Synthetic4Relight"
 ENVIRONMENT_MAPS="/home/zjk/datasets/Synthetic4Relight/Environment_Maps"
-ITERATION="299"  # Default iteration number, can be overridden by --iteration argument
+ITERATION="799"  # Default iteration number, can be overridden by --iteration argument
 
 # Enable/disable switches for each step
 enable_refine=false
@@ -24,13 +24,13 @@ enable_relight=false  # Switch for relight functionality
 # Scene-specific parameters
 declare -A SCENE_PARAMS
 SCENE_PARAMS[jugs,offset]="0.1"
-SCENE_PARAMS[jugs,geometry_threshold]="0.3"
+SCENE_PARAMS[jugs,geometry_threshold]="0.2"
 
 SCENE_PARAMS[chair,offset]="0.1"
-SCENE_PARAMS[chair,geometry_threshold]="0.3"
+SCENE_PARAMS[chair,geometry_threshold]="0.2"
 
-SCENE_PARAMS[air_baloons,offset]="0.3"
-SCENE_PARAMS[air_baloons,geometry_threshold]="0.3"
+SCENE_PARAMS[air_baloons,offset]="0.2"
+SCENE_PARAMS[air_baloons,geometry_threshold]="0.2"
 
 SCENE_PARAMS[hotdog,offset]="0.1"
 SCENE_PARAMS[hotdog,geometry_threshold]="0.2"

@@ -116,9 +116,19 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
             if os.path.exists(output_path):
                 continue  # Skip if image already exists
             
-            img, _ = mi.render(scene_dict, params=params, sensor=sensor, spp=args.render_spp) #img is linear space
+            img, aovs = mi.render(scene_dict, params=params, sensor=sensor, spp=args.render_spp) #img is linear space
             rgb_bmp = resize_img(mi.Bitmap(img),dataset.target_res)
             write_bitmap(output_path, rgb_bmp)
+
+            if args.separate_direct_indirect:
+                direct_light_img = aovs['direct_light'][:, :, :3]
+                indirect_light_img = aovs['indirect_light'][:, :, :3]
+
+                direct_light_bmp = resize_img(mi.Bitmap(direct_light_img),dataset.target_res)
+                indirect_light_bmp = resize_img(mi.Bitmap(indirect_light_img),dataset.target_res)
+
+                write_bitmap(join(envmap_dir, f'{idx:02d}_direct_light' + ('.png')), direct_light_bmp)
+                write_bitmap(join(envmap_dir, f'{idx:02d}_indirect_light' + ('.png')), indirect_light_bmp)
 
 def render_materials(dataset, scene_dict):
     albedo_list, ref_albedo_list = [], []

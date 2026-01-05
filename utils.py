@@ -302,7 +302,7 @@ def compute_rescale_ratio(gt_albedo_list, albedo_list):
         gt_albedo_flat = gt_albedo.reshape(-1, 3)
         albedo_flat = albedo.reshape(-1, 3)
     
-        mask = ~(albedo_flat == 0).all(dim=1)
+        mask = ~(gt_albedo_flat < 1e-4).all(dim=1)
 
         gt_albedo_flat = gt_albedo_flat[mask]
         albedo_flat = albedo_flat[mask]

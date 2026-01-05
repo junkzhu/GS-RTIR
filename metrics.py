@@ -73,10 +73,14 @@ def read_RGB_images(renders_dir):
         if not fname.endswith(".png"):
             continue
 
-        image_paths.append(fname)
+        name_no_ext = os.path.splitext(fname)[0]
+        base_name = name_no_ext.split("_")[0]
+
+        if base_name not in image_paths:
+            image_paths.append(base_name)
 
     for image_path in image_paths:
-        renders["rgb"].append(read_img(os.path.join(renders_dir, image_path), convert_to_linear=True))
+        renders["rgb"].append(read_img(os.path.join(renders_dir, f"{image_path}.png"), convert_to_linear=True))
     
     return renders
 
@@ -274,6 +278,11 @@ def metrics_relighting_envmap(envmap_name):
         rgb_img       = renders["rgb"][real_idx][:, :, :3]
         ref_rgb       = dataset.ref_relight_images[envmap_name][idx]
         
+        mask = np.any(ref_rgb != 0, axis=-1)
+        mask = mask[..., None]
+        rgb_img = np.where(mask, rgb_img, 0.0)
+        ref_rgb = np.where(mask, ref_rgb, 0.0)
+
         psnr_rgb_val = lpsnr(ref_rgb, rgb_img, convert_to_srgb=True)
         ssim_rgb_val = lssim(ref_rgb, rgb_img, convert_to_srgb=True)
 

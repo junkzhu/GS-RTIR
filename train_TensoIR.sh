@@ -35,6 +35,9 @@ SCENE_PARAMS[armadillo,geometry_threshold]="0.2"
 SCENE_PARAMS[ficus,offset]="0.1"
 SCENE_PARAMS[ficus,geometry_threshold]="0.2"
 
+SCENE_PARAMS[pots,offset]="0.1"
+SCENE_PARAMS[pots,geometry_threshold]="0.2"
+
 # Function to run refine for a scene
 run_refine() {
     local scene=$1
