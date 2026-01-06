@@ -302,7 +302,7 @@ def compute_rescale_ratio(gt_albedo_list, albedo_list):
         gt_albedo_flat = gt_albedo.reshape(-1, 3)
         albedo_flat = albedo.reshape(-1, 3)
     
-        mask = ~(gt_albedo_flat < 1e-4).all(dim=1)
+        mask = (gt_albedo_flat > 0.0).all(dim=1)
 
         gt_albedo_flat = gt_albedo_flat[mask]
         albedo_flat = albedo_flat[mask]
@@ -316,8 +316,8 @@ def compute_rescale_ratio(gt_albedo_list, albedo_list):
     single_channel_ratio = (gt_all / albedo_all.clamp(min=1e-6))[..., 0].median()
     three_channel_ratio, _ = (gt_all / albedo_all.clamp(min=1e-6)).median(dim=0)
 
-    if "air_baloons" in args.dataset_name:
-        three_channel_ratio = [(gt_all/albedo_all.clamp_min(1e-6))[..., 0].median().item()] * 3 # follow IRGS
+    #if "air_baloons" in args.dataset_name:
+        #three_channel_ratio = [(gt_all/albedo_all.clamp_min(1e-6))[..., 0].median().item()] * 3 # follow IRGS
 
     return mi.TensorXf(single_channel_ratio), mi.TensorXf(three_channel_ratio)
 
