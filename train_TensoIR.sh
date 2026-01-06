@@ -15,7 +15,7 @@ ENVIRONMENT_MAPS="/home/zjk/datasets/TensoIR/Environment_Maps"
 ITERATION="799"  # Default iteration number, can be overridden by command line argument
 
 # Enable/disable switches for each step
-enable_refine=true
+enable_refine=false
 enable_train=true
 enable_render=true
 enable_metrics=true

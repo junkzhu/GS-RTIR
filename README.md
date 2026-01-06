@@ -1,11 +1,25 @@
-通过网盘分享的文件：TensoIR.zip
-链接: https://pan.baidu.com/s/1sxG5vFs24gzOFAoLR-fdQQ?pwd=vapz 提取码: vapz
+## 数据集
+数据集链接：
+链接: https://pan.baidu.com/s/1KGnlYt-Bfgt_x9mPz4kQAw?pwd=puau 提取码: puau 
+如果已有包含先验的数据集，可以直接下链接里面的_3dgrt模型文件。_3dgrt模型文件和数据集里的3dgrt文件一致，不需要重新粘贴。
 
-单个armadillo数据集： （建议使用，小一点..）
-链接: https://pan.baidu.com/s/1cAjMdc3vL0H6yju9VHHueA?pwd=va9j 提取码: va9j 
+## 说明
+常用constant中的参数：
+--stride 合成数据集都是很平滑的视角变化，跳过几个不影响指标，可以快速看render结果
+--envmap_optimization 关掉会用GT envmap 即sunset
+TRAIN_UPSAMPLE_ITER 会默认进行训练照片分辨率调整，如[200,400], 1-200分辨率 800/4 = 200, 200-400分辨率 800/2 = 400, 400-800分辨率 800/1 = 800
+
+训练轮次和学习率在 train.yaml
+
+目前结果记录：
+https://docs.qq.com/sheet/DR3BYTWJWd1N4ZHFF?tab=BB08J2
+理论上就是如下命令能跑出来的结果：
+./train_TensoIR.sh lego
+./train_Synthetic4Relight.sh jugs
+...
 
 
-使用方法..(ai写的)
+使用方法..(ai写的，但是是对的)
 
 # Usage
 
@@ -15,13 +29,13 @@
 ./train_TensoIR.sh lego
 
 # Train a single scene and specify which iteration's ply file to use for render/metrics
-./train_TensoIR.sh 200 lego
+./train_TensoIR.sh lego --iteration 200 #这个是控制relight用哪个ply的，和训练次数无关
 
 # Train multiple scenes
 ./train_TensoIR.sh lego hotdog ficus
 
 # Run a debug instance (automatically creates lego2 folder)
-./train_TensoIR.sh lego2
+./train_TensoIR.sh lego2 --cuda_device 1 #便于debug
 ```
 
 ## Training on Synthetic4Relight Dataset
