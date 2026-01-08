@@ -314,7 +314,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, hit_valid_next)
 
             # Compute MIS weight for the next vertex
-            ds = mi.DirectionSample3f(scene, si=si_next, ref=si_cur)
+            si_mis = dr.zeros(mi.SurfaceInteraction3f)
+            si_mis.wi = -ray_next.d
+            ds = mi.DirectionSample3f(scene, si=si_mis, ref=si_cur)
+            
             em_pdf = scene.pdf_emitter_direction(ref=si_cur, ds=ds, active=active_next)
             mis_em = dr.detach(mis_weight(bsdf_pdf, em_pdf))
 
