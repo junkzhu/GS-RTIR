@@ -19,7 +19,7 @@ def get_args():
     parser.add_argument("--max_workers", type=int, default=8, help="The maximum number of workers for parallel processing.")
 
     #-------------- dataset config --------------
-    parser.add_argument("--dataset_type", help="The name of the dataset.")
+    parser.add_argument("--dataset_type", default='TensoIR', help="The name of the dataset.")
     parser.add_argument("--dataset_name", help="The name of the scene.")
     parser.add_argument("--dataset_path", help="The path to the dataset directory.")
     parser.add_argument("--diffusion_model", default="rgb2x", help="The name of the diffusion model, such as rgb2x, genprior.")
@@ -99,7 +99,7 @@ OUTPUT_PLY_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './ply'))
 OUTPUT_RENDER_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './renders'))
 OUTPUT_RELIGHT_DIR = os.path.realpath(os.path.join(OUTPUT_RENDER_DIR, './relight'))
 OUTPUT_ENVMAP_DIR = os.path.realpath(os.path.join(OUTPUT_DIR, './envmap'))
-
+OUTPUT_HYBRID_DIR = os.path.realpath(os.path.join(OUTPUT, f'./hybrid_results/{timestamp}'))
 
 def ensure_dir(directory):
     """Ensure a directory exists, create it if it doesn't."""

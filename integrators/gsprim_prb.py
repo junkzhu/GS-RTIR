@@ -282,9 +282,9 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
             if self.separate_direct_indirect:
                 # render direct illumination
-                L_direct = dr.select((depth == 1), Le, 0.0) + dr.select(first_vertex, Lr_dir, 0.0)
+                L_direct += dr.select((depth == 1), Le, 0.0) + dr.select(first_vertex, Lr_dir, 0.0)
                 # render indirect illumination
-                L_indirect = dr.select((depth == 1), 0.0, Le) + dr.select(first_vertex, 0.0, Lr_dir)
+                L_indirect += dr.select((depth == 1), 0.0, Le) + dr.select(first_vertex, 0.0, Lr_dir)
                  
             # Intersect next surface
             cosα = dr.abs(dr.dot(ray_cur.d, N_cur))

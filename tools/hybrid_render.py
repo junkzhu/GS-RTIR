@@ -27,10 +27,10 @@ def load_scene_config(gaussians_attributes):
         'type': 'scene',
         'integrator': {
             'type': 'hybrid_rt',
-            'max_depth': 2,
+            'max_depth': 3,
             'pt_rate': 1.0,
             'gaussian_max_depth': 128,
-            'hide_emitters': True,
+            'hide_emitters': False,
             'use_mis': True,
             'selfocc_offset_max': 0.1,
             'geometry_threshold': 0.2,
@@ -51,15 +51,15 @@ def load_scene_config(gaussians_attributes):
         },
         'rectangle': {
             'type': 'rectangle',
-            'to_world': mi.ScalarTransform4f().translate([0, 0, -0.5]), # .scale([2, 2, 1])
+            'to_world': mi.ScalarTransform4f().scale([2, 2, 1]).translate([0, 0, -0.7]),
             'material': {
                 'type': 'diffuse'
-                }
             }
+        },
         # 'sphere': {
         #     'type': 'sphere',
-        #     'center': [0, 2, 0],
-        #     'radius': 0.5,
+        #     'center': [0, 1, 1],
+        #     'radius': 0.3,
         #     'bsdf': {
         #         'type': 'diffuse'
         #     }
@@ -118,12 +118,15 @@ def render_scene(dataset, scene_dict):
         write_bitmap(join(OUTPUT_HYBRID_DIR, f'{idx:02d}_ref' + ('.png')), dataset.ref_images[idx][sensor.film().crop_size()[0]])
 
 if __name__ == "__main__":
+    dataset_path = '/home/zjk/datasets/TensoIR/armadillo'
+    ply_path = '/home/zjk/code/GS-RTIR/outputs/TensoIR/armadillo#0/ply/iter_799_rescaled.ply'
+    
     with time_measure("Loading dataset"):
-        dataset = Dataset('/home/zjk/datasets/TensoIR/armadillo', RENDER_UPSAMPLE_ITER, "train")
+        dataset = Dataset(dataset_path, RENDER_UPSAMPLE_ITER, "train")
 
     with time_measure("Initializing gaussians"):
         gaussians = GaussianModel()
-        gaussians.restore_from_ply('/home/zjk/code/GS-RTIR/outputs/TensoIR/armadillo#0/ply/iter_799_rescaled.ply', False) #TODO
+        gaussians.restore_from_ply(ply_path, False)
 
     with time_measure("Loading gaussian to ellipsoids factory"):
         ellipsoidsfactory = EllipsoidsFactory()

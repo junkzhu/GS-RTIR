@@ -126,10 +126,10 @@ class HybridRTIntegrator(ReparamIntegrator):
         D_mesh = dr.select(mesh_active, mi.Spectrum(dr.dot(si_mesh.p - ray_o, ray_d)), mi.Spectrum(0.0))
 
         # 明确第一跳有效交点
-        hit_valid = hit_valid | mesh_active
+        hit_valid = active & hit_valid | mesh_active
 
         # 明确下一跳光线的有效性
-        ray_valid = ray_valid & ~mesh_active
+        ray_valid = active & ray_valid & ~hit_valid
 
         # 统一获取Gbuffer Output
         A = dr.select(~mesh_active, A_gs, A_mesh)
@@ -192,7 +192,6 @@ class HybridRTIntegrator(ReparamIntegrator):
             active_next = mi.Bool(active)
             mis_direct = 0.0
 
- 
             si_e = dr.zeros(mi.SurfaceInteraction3f)
             si_e.wi = -ray_cur.d
             emitter_val = dr.select(ray_valid, scene.environment().eval(si_e), 0.0)
@@ -235,9 +234,9 @@ class HybridRTIntegrator(ReparamIntegrator):
 
             if self.separate_direct_indirect:
                 # render direct illumination
-                L_direct = dr.select((depth == 1), Le, 0.0) + dr.select(first_vertex, Lr_dir, 0.0)
+                L_direct += dr.select((depth == 1), Le, 0.0) + dr.select(first_vertex, Lr_dir, 0.0)
                 # render indirect illumination
-                L_indirect = dr.select((depth == 1), 0.0, Le) + dr.select(first_vertex, 0.0, Lr_dir)
+                L_indirect += dr.select((depth == 1), 0.0, Le) + dr.select(first_vertex, 0.0, Lr_dir)
                  
             # Intersect next surface
             cosα = dr.abs(dr.dot(ray_cur.d, N_cur))
@@ -252,7 +251,10 @@ class HybridRTIntegrator(ReparamIntegrator):
             si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, hit_valid_next)
 
             # Compute MIS weight for the next vertex
-            ds = mi.DirectionSample3f(scene, si=si_next, ref=si_cur)
+            si_mis = dr.zeros(mi.SurfaceInteraction3f)
+            si_mis.wi = -ray_next.d
+            ds = mi.DirectionSample3f(scene, si=si_mis, ref=si_cur)
+
             em_pdf = scene.pdf_emitter_direction(ref=si_cur, ds=ds, active=active_next)
             mis_em = dr.detach(mis_weight(bsdf_pdf, em_pdf))
 
