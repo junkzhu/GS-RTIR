@@ -100,7 +100,8 @@ def register_optimizer(params, train_conf):
 
     opt['albedos'] = params['shape.albedos']
     opt['roughnesses'] = params['shape.roughnesses']
-
+    opt['metallics'] = params['shape.metallics']
+    
     # set learning rate
     lr_dict = {
         'centers':     train_conf.optimizer.params.centers_lr,
@@ -111,6 +112,7 @@ def register_optimizer(params, train_conf):
         
         'albedos':     train_conf.optimizer.params.albedos_lr,
         'roughnesses': train_conf.optimizer.params.roughnesses_lr,
+        'metallics': train_conf.optimizer.params.metallics_lr,
     }
 
     # register envmap parameters
@@ -140,6 +142,7 @@ def register_optimizer(params, train_conf):
 
     opt.set_bounds('albedos', lower=1e-6, upper=1-1e-6)
     opt.set_bounds('roughnesses', lower=1e-6, upper=1-1e-6)
+    opt.set_bounds('metallics', lower=1e-6, upper=1-1e-6)
 
     return opt
 
@@ -150,6 +153,7 @@ def update_params(opt, params):
     
     params['shape.albedos'] = opt['albedos']
     params['shape.roughnesses'] = opt['roughnesses']
+    params['shape.metallics'] = opt['metallics']
     
     if args.envmap_optimization:
         if args.spherical_gaussian:
@@ -279,14 +283,16 @@ def compute_losses(img, aovs, ref_img, idx, sensor, dataset, opt, kdtree_idx, i)
     else:
         total_loss += view_loss + 0.1 * normal_loss + 0.001 * lamb_loss + 0.01 * tv_loss + 0.05 * priors_loss + 1e-4 * envmap_reg(opt, args.num_sgs)
 
-    return total_loss, img, albedo_img, roughness_img, depth_img, normal_img, normal_mask, ref_img, sensor
+    return total_loss, img, albedo_img, roughness_img, metallic_img, depth_img, normal_img, normal_mask, ref_img, sensor
 
-def save_render_results(i, idx, img, ref_img, albedo_img, roughness_img, depth_img, normal_img, normal_mask, aovs, dataset):
+def save_render_results(i, idx, img, ref_img, albedo_img, roughness_img, metallic_img, depth_img, normal_img, normal_mask, aovs, dataset):
     """Save rendering results for the current iteration"""
     rgb_bmp = resize_img(mi.Bitmap(img), dataset.target_res)
     rgb_ref_bmp = resize_img(mi.Bitmap(ref_img), dataset.target_res)
     albedo_bmp = resize_img(mi.Bitmap(albedo_img), dataset.target_res)
     roughness_bmp = resize_img(mi.Bitmap(roughness_img), dataset.target_res)
+    metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
+
     depth_bmp = resize_img(mi.Bitmap(depth_img/dr.max(depth_img)), dataset.target_res)
     normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img + 1.0)/2 , 0))), dataset.target_res)
 
@@ -294,6 +300,7 @@ def save_render_results(i, idx, img, ref_img, albedo_img, roughness_img, depth_i
     write_bitmap(join(OUTPUT_OPT_DIR, f'opt-{i:04d}-{idx:02d}_ref' + ('.png')), rgb_ref_bmp)
     write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_albedo' + ('.png')), albedo_bmp)
     write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_roughness' + ('.png')), roughness_bmp)
+    write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_metallic' + ('.png')), metallic_bmp)
     write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_depth' + ('.png')), depth_bmp)
     write_bitmap(join(OUTPUT_EXTRA_DIR, f'opt-{i:04d}-{idx:02d}_normal' + ('.png')), normal_bmp)
             
@@ -393,7 +400,7 @@ def train_loop(train_conf, dataset, gaussians, kdtree_idx, gsstrategy, scene_dic
             ref_img = dataset.ref_images[idx][sensor.film().crop_size()[0]]
             
             # Compute all losses
-            total_loss, img, albedo_img, roughness_img, depth_img, normal_img, normal_mask, ref_img, sensor = compute_losses(
+            total_loss, img, albedo_img, roughness_img, metallic_img, depth_img, normal_img, normal_mask, ref_img, sensor = compute_losses(
                 img, aovs, ref_img, idx, sensor, dataset, opt, kdtree_idx, i
             )
 
@@ -403,7 +410,7 @@ def train_loop(train_conf, dataset, gaussians, kdtree_idx, gsstrategy, scene_dic
             loss += total_loss
 
             # Save rendering results
-            save_render_results(i, idx, img, ref_img, albedo_img, roughness_img, depth_img, normal_img, normal_mask, aovs, dataset)
+            save_render_results(i, idx, img, ref_img, albedo_img, roughness_img, metallic_img, depth_img, normal_img, normal_mask, aovs, dataset)
 
             # Compute metrics
             rgb_psnr_iter, albedo_psnr_iter, roughness_mse_iter, normal_mae_iter = compute_metrics(

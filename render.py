@@ -147,14 +147,14 @@ def render_materials(dataset, scene_dict):
         #aovs
         albedo_img = aovs['albedo'][:, :, :3]
         roughness_img = aovs['roughness'][:, :, :1]
-        #metallic_img = aovs['metallic'][:, :, :1]
+        metallic_img = aovs['metallic'][:, :, :1]
         normal_img = aovs['normal'][:, :, :3]
 
         normal_mask = np.any(normal_img != 0, axis=2, keepdims=True)
 
         albedo_bmp = resize_img(mi.Bitmap(albedo_img), dataset.target_res)
         roughness_bmp = resize_img(mi.Bitmap(roughness_img), dataset.target_res)
-        #metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
+        metallic_bmp = resize_img(mi.Bitmap(metallic_img), dataset.target_res)
         normal_bmp = resize_img(mi.Bitmap(mi.TensorXf(np.where(normal_mask, (normal_img+1)/2, 0))), dataset.target_res) 
 
 
@@ -164,7 +164,7 @@ def render_materials(dataset, scene_dict):
         write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_roughness' + ('.png')), roughness_bmp)
         write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_roughness_ref' + ('.png')), dataset.ref_roughness_images[idx][sensor.film().crop_size()[0]])
 
-        #write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_metallic' + ('.png')), metallic_bmp)
+        write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_metallic' + ('.png')), metallic_bmp)
         write_bitmap(join(OUTPUT_RENDER_DIR, f'{idx:02d}_normal' + ('.png')), normal_bmp)
 
         if args.separate_direct_indirect:

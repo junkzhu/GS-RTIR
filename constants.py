@@ -74,7 +74,7 @@ def get_args():
 args = get_args()
 
 #-------------- optimizer params --------------=
-OPTIMIZE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.albedos', 'shape.roughnesses']
+OPTIMIZE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.albedos', 'shape.roughnesses', 'shape.metallic']
 REFINE_PARAMS = ['shape.data', 'shape.opacities', 'shape.normals', 'shape.sh_coeffs']
 
 #-------------- upsample & save iter --------------=

@@ -10,6 +10,7 @@ optimizer:
     opacities_lr: 0.0
     albedos_lr: 0.02
     roughnesses_lr: 0.02
+    metallics_lr: 0.0
 
     envmap:
       sg_lobe_lr: 0.02
