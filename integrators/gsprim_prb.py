@@ -296,6 +296,8 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
 
             A_next_raw, R_next_raw, M_next_raw, D_next_raw, N_next_raw, hit_valid_next, ray_next_valid, weight_acc_next, ray_depth_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
             
+            ray_next_valid = ray_next_valid & ~hit_valid_next
+
             state_next = {
                 'albedo': dr.select(active, A_next_raw, 0.0),
                 'roughness': dr.select(active, R_next_raw, 0.0),
