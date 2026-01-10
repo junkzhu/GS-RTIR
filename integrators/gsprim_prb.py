@@ -140,7 +140,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
         
         primal = (mode == dr.ADMode.Primal)
         
-        valid_ray = (not self.hide_emitters) and scene.environment() is not None #TODO: hide_emitters not work in prb
+        valid_ray = mi.Bool(True)
 
         # --------------------- Configure loop state ----------------------
         mask_pt = mi.Mask(active)
@@ -217,6 +217,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             'depth': aov_D,
             'normal': aov_N
         }
+
+        # show emitter
+        if (not self.hide_emitters) and scene.environment() is not None:
+            result[mask_pt] += dr.select(hit_valid, 0.0, dr.detach(scene.environment().eval(si_cur)))
 
         active_prev = mi.Bool(active)
         while dr.hint(active, max_iterations=self.max_depth, label="Path Replay Backpropagation (%s)" % mode.name):

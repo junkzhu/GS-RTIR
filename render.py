@@ -103,8 +103,9 @@ def render_relight_images(gaussians, dataset, scene_dict, params):
 
         #change envmap
         envmap_bmp = mi.Bitmap(envmap)
-        bitmap = mi.TensorXf(np.array(envmap_bmp, dtype=np.float32))
+        bitmap = mi.TensorXf(np.array(envmap_bmp, dtype=np.float32))[..., :3]
         params['EnvironmentMapEmitter.data'] = bitmap
+        params.update()
 
         relight_pbar = tqdm.tqdm(enumerate(dataset.sensors), total=len(dataset.sensors), desc=f"Relighting {envmap_name}")
         for idx, sensor in relight_pbar:
