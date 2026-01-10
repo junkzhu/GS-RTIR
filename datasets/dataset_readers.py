@@ -3,6 +3,8 @@ import os
 import numpy as np
 import drjit as dr
 import mitsuba as mi
+import torch
+import math
 from pathlib import Path
 from PIL import Image
 from utils import resize_img, srgb_to_linear
@@ -11,6 +13,80 @@ from concurrent.futures import ThreadPoolExecutor
 from constants import args
 
 mipmap_min_res = 100
+
+def compute_win_significance(significance_map: torch.Tensor, scale: float) -> float:
+    h, w = significance_map.shape[-2:]
+    c = ((h + 1) // 2, (w + 1) // 2)
+    win_size = (int(h / scale), int(w / scale))
+    win = significance_map[..., c[0] - win_size[0] // 2 : c[0] + win_size[0] // 2, c[1] - win_size[1] // 2 : c[1] + win_size[1] // 2]
+    return win.sum().item()
+
+def scale_solver(significance_map: torch.Tensor, target_significance: float, iters: int = 64) -> float:
+    L, R = 0.0, 1.0
+    for _ in range(iters):
+        mid = (L + R) / 2
+        win_significance = compute_win_significance(significance_map, 1 / mid)
+        if win_significance < target_significance:
+            L = mid
+        else:
+            R = mid
+    return 1 / mid
+
+def build_resolution_schedule(original_images, start_significance_factor=4, reso_sample_num=32, increase_reso_until=1000, max_reso_scale_init=8):
+    assert reso_sample_num >= 2
+    max_reso_scale = max_reso_scale_init
+    scene_freq_image = None
+
+    for img in original_images:
+        img_fft_centered = torch.fft.fftshift(torch.fft.fft2(img), dim=(-2, -1))
+        img_fft_centered_mod = (img_fft_centered.real.square() + img_fft_centered.imag.square()).sqrt()
+        scene_freq_image = img_fft_centered_mod if scene_freq_image is None else scene_freq_image + img_fft_centered_mod
+
+        e_total = img_fft_centered_mod.sum().item()
+        e_min = e_total / start_significance_factor
+        max_reso_scale = min(max_reso_scale, scale_solver(img_fft_centered_mod, e_min))
+
+    modulation_func = math.log
+
+    reso_scales = []
+    reso_level_significance = []
+    reso_level_begin = []
+
+    scene_freq_image /= len(original_images)
+    E_total = scene_freq_image.sum().item()
+    E_min = compute_win_significance(scene_freq_image, max_reso_scale)
+
+    reso_level_significance.append(E_min)
+    reso_scales.append(max_reso_scale)
+    reso_level_begin.append(0)
+
+    for i in range(1, reso_sample_num - 1):
+        reso_level_significance.append((E_total - E_min) * (i - 0) / (reso_sample_num - 1 - 0) + E_min)
+        reso_scales.append(scale_solver(scene_freq_image, reso_level_significance[-1]))
+        reso_level_significance[-2] = modulation_func(reso_level_significance[-2] / E_min)
+        reso_level_begin.append(int(increase_reso_until * reso_level_significance[-2] / modulation_func(E_total / E_min)))
+
+    reso_level_significance.append(modulation_func(E_total / E_min))
+    reso_scales.append(1.0)
+    reso_level_significance[-2] = modulation_func(reso_level_significance[-2] / E_min)
+    reso_level_begin.append(int(increase_reso_until * reso_level_significance[-2] / modulation_func(E_total / E_min)))
+    reso_level_begin.append(increase_reso_until)
+
+    return reso_scales, reso_level_begin
+
+def get_res_scale(iteration: int, reso_scales, reso_level_begin, increase_reso_until: int):
+    if iteration >= increase_reso_until:
+        return 1
+    if iteration < reso_level_begin[1]:
+        return int(reso_scales[0])
+    next_i = 2
+    while iteration >= reso_level_begin[next_i]:
+        next_i += 1
+    i = next_i - 1
+    i_now, i_nxt = reso_level_begin[i : i + 2]
+    s_lst, s_now = reso_scales[i - 1 : i + 1]
+    scale = (1 / ((iteration - i_now) / (i_nxt - i_now) * (1 / s_now ** 2 - 1 / s_lst ** 2) + 1 / s_lst ** 2)) ** 0.5
+    return int(scale)
 
 def load_bitmap(fn, bsrgb2linear = True, normalize = False, mitsuba_axis = False):
     """Load bitmap as float32 and apply gamma correction"""
@@ -43,16 +119,21 @@ def load_bitmap(fn, bsrgb2linear = True, normalize = False, mitsuba_axis = False
         
     return mi.Bitmap(img)
 
-def load_mipmaps(fn, bsrgb2linear = True, normalize = False, mitsuba_axis = False):
+def load_mipmaps(fn, bsrgb2linear = True, max_reso_scale_init=None, normalize = False, mitsuba_axis = False):
     bmp = load_bitmap(fn, bsrgb2linear, normalize, mitsuba_axis)
     d = {int(bmp.size()[0]): mi.TensorXf(bmp)}
     new_res = bmp.size()
     while np.min(new_res) > mipmap_min_res:
         new_res = new_res // 2
         d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
+    if max_reso_scale_init != None:
+        res = bmp.size()
+        for i in range(2, max_reso_scale_init + 1):
+            new_res = res // i
+            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
     return d
 
-def load_normal_prior_mipmaps(args, sensors, bsrgb2linear = True, normalize = False, mitsuba_axis = False):
+def load_normal_prior_mipmaps(args, sensors, bsrgb2linear = True, max_reso_scale_init=None, normalize = False, mitsuba_axis = False):
     idx, fn = args
     
     bmp = load_bitmap(fn, bsrgb2linear, normalize, mitsuba_axis)
@@ -74,10 +155,14 @@ def load_normal_prior_mipmaps(args, sensors, bsrgb2linear = True, normalize = Fa
     while np.min(new_res) > mipmap_min_res:
         new_res = new_res // 2
         d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
-    
+    if max_reso_scale_init != None:
+        res = bmp.size()
+        for i in range(2, max_reso_scale_init + 1):
+            new_res = res // i
+            d[int(new_res[0])] = dr.clamp(mi.TensorXf(resize_img(bmp, new_res, smooth=False)), 0.0, 1.0)
     return d
 
-def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="tent", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0]), relight_envmap_names=None, load_ref_relight_images=False):
+def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="tent", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0]), relight_envmap_names=None, load_ref_relight_images=False, train_iters=None,  max_reso_scale_init=None):
     #-------------------------SENSORS------------------------
     sensors = []
     sensors_normal = []
@@ -204,31 +289,61 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
     normal_paths = [path.replace('rgba_sunset.png', 'normal.png') for path in image_paths]
     roughness_paths = [path.replace('rgba_sunset.png', 'roughness.png') for path in image_paths]
 
+    scale_list = None
+    if train_iters != None:
+        scale_list = []
+        def load_reference_image_rgb(path):
+            img = np.array(Image.open(path)).astype(np.float32) / 255.0
+            img_t = torch.tensor(img, dtype=torch.float32)
+            if img_t.max() > 1.5:
+                img_t = img_t / 255.0
+            if img_t.ndim == 3 and img_t.shape[-1] == 4:
+                img_t = img_t[..., :3]  # 去掉alpha
+            img_t = img_t.permute(2, 0, 1)  # [C, H, W]
+            return img_t
+        with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+            original_images = list(
+                executor.map(
+                    lambda fn: load_reference_image_rgb(fn),
+                    image_paths
+                )
+            )
+        reso_scales, reso_level_begin = build_resolution_schedule(
+            original_images, start_significance_factor=4, reso_sample_num=24, increase_reso_until=train_iters, max_reso_scale_init=max_reso_scale_init
+        )
+        prev = None
+        for i in range(train_iters):
+            sc = get_res_scale(i, reso_scales, reso_level_begin, train_iters)
+            if prev is None or sc != prev:
+                scale_list.append(i)
+                prev = sc
+
+
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
         ref_images = list(
             executor.map(
-                lambda fn: load_mipmaps(fn, True),
+                lambda fn: load_mipmaps(fn, True, max_reso_scale_init=max_reso_scale_init),
                 image_paths
             )
         )
 
         ref_albedo_images = list(
             executor.map(
-                lambda fn: load_mipmaps(fn, False),
+                lambda fn: load_mipmaps(fn, False, max_reso_scale_init=max_reso_scale_init),
                 albedo_paths
             )
         )
 
         ref_normal_images = list(
             executor.map(
-                lambda fn: load_mipmaps(fn, False, normalize=True, mitsuba_axis=False),
+                lambda fn: load_mipmaps(fn, False, max_reso_scale_init=max_reso_scale_init, normalize=True, mitsuba_axis=False),
                 normal_paths
             )
         )
 
         ref_roughness_images = list(
             executor.map(
-                lambda fn: load_mipmaps(fn, False),
+                lambda fn: load_mipmaps(fn, False, max_reso_scale_init=max_reso_scale_init),
                 roughness_paths
             )
         )
@@ -244,9 +359,9 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
                 ref_relight_images[envmap_name].append(d)
 
     if split != 'train' and load_ref_relight_images:
-        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None, ref_relight_images
+        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None, ref_relight_images, scale_list
     elif split != 'train':
-        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None, None
+        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, None, None, None, None, scale_list
 
     albedo_priors_images=[]
     roughness_priors_images=[]
@@ -265,28 +380,28 @@ def read_nerf_synthetic(nerf_data_path, format, camera_indices=None, resx=800, r
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
         albedo_priors_images = list(
             executor.map(
-                lambda fn: load_mipmaps(fn, (args.diffusion_model == "rgb2x")),
+                lambda fn: load_mipmaps(fn, (args.diffusion_model == "rgb2x"), max_reso_scale_init=max_reso_scale_init),
                 albedo_priors_paths
             )
         )
 
         roughness_priors_images = list(
             executor.map(
-                lambda fn: load_mipmaps(fn, False),
+                lambda fn: load_mipmaps(fn, False, max_reso_scale_init=max_reso_scale_init),
                 roughness_priors_paths
             )
         )
 
         normal_priors_images = list(
             executor.map(
-                lambda args: load_normal_prior_mipmaps(args, sensors, False, normalize=True, mitsuba_axis=True),
+                lambda args: load_normal_prior_mipmaps(args, sensors, False, max_reso_scale_init=max_reso_scale_init, normalize=True, mitsuba_axis=True),
                 enumerate(normal_priors_paths)
             )
         )
 
-    return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images, None
+    return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, ref_normal_images, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images, None, scale_list
 
-def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="tent", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0]), relight_envmap_names=None, load_ref_relight_images=False):
+def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="tent", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0]), relight_envmap_names=None, load_ref_relight_images=False, train_iters=None,  max_reso_scale_init=None):
     #-------------------------SENSORS------------------------
     sensors = []
     sensors_normal = []
@@ -410,8 +525,38 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
             raise FileNotFoundError(f"Image file not found: {img_path}")
         image_paths.append(str(img_path.resolve()))
 
+    
+    scale_list = None
+    if train_iters != None:
+        scale_list = []
+        def load_reference_image_rgb(path):
+            img = np.array(Image.open(path)).astype(np.float32) / 255.0 
+            img_t = torch.tensor(img, dtype=torch.float32)
+            if img_t.max() > 1.5:
+                img_t = img_t / 255.0
+            if img_t.ndim == 3 and img_t.shape[-1] == 4:
+                img_t = img_t[..., :3]  # 去掉alpha
+            img_t = img_t.permute(2, 0, 1)  # [C, H, W]
+            return img_t
+        with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+            original_images = list(
+                executor.map(
+                    lambda fn: load_reference_image_rgb(fn),
+                    image_paths
+                )
+            )
+        reso_scales, reso_level_begin = build_resolution_schedule(
+            original_images, start_significance_factor=4, reso_sample_num=24, increase_reso_until=train_iters, max_reso_scale_init=max_reso_scale_init
+        )
+        prev = None
+        for i in range(train_iters):
+            sc = get_res_scale(i, reso_scales, reso_level_begin, train_iters)
+            if prev is None or sc != prev:
+                scale_list.append(i)
+                prev = sc
+
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-        ref_images = list(executor.map(lambda fn: load_mipmaps(fn, True), image_paths))
+        ref_images = list(executor.map(lambda fn: load_mipmaps(fn, True, max_reso_scale_init=max_reso_scale_init), image_paths))
 
     ref_albedo_images=[]
     ref_roughness_images=[]
@@ -449,9 +594,9 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
                 ref_relight_images[envmap_name].append(d)
 
     if split != 'train' and load_ref_relight_images:
-        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None, ref_relight_images
+        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None, ref_relight_images, scale_list
     elif split != 'train':
-        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None, None
+        return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, None, None, None, None, scale_list
 
     albedo_priors_images=[]
     roughness_priors_images=[]
@@ -467,11 +612,11 @@ def read_Synthetic4Relight(nerf_data_path, format, camera_indices=None, resx=800
         normal_priors_paths = [path.replace('.png', '_normal_genprior.png') for path in image_paths]
 
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-        albedo_priors_images = list(executor.map(lambda fn: load_mipmaps(fn, (args.diffusion_model == "rgb2x")), albedo_priors_paths))
-        roughness_priors_images = list(executor.map(lambda fn: load_mipmaps(fn, False), roughness_priors_paths))
-        normal_priors_images = list(executor.map(lambda args: load_normal_prior_mipmaps(args, sensors, False, normalize=True, mitsuba_axis=True), enumerate(normal_priors_paths)))
+        albedo_priors_images = list(executor.map(lambda fn: load_mipmaps(fn, (args.diffusion_model == "rgb2x"), max_reso_scale_init=max_reso_scale_init), albedo_priors_paths))
+        roughness_priors_images = list(executor.map(lambda fn: load_mipmaps(fn, False, max_reso_scale_init=max_reso_scale_init), roughness_priors_paths))
+        normal_priors_images = list(executor.map(lambda args: load_normal_prior_mipmaps(args, sensors, False, max_reso_scale_init=max_reso_scale_init, normalize=True, mitsuba_axis=True), enumerate(normal_priors_paths)))
 
-    return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images, None
+    return sensors, sensors_normal, sensors_intrinsic, ref_images, ref_albedo_images, None, ref_roughness_images, albedo_priors_images, roughness_priors_images, normal_priors_images, None, scale_list
 
 def read_Stanford_orb(nerf_data_path, format, camera_indices=None, resx=800, resy=800, radius=2.0, scale_factor=1.0, split='train', env='sunset', filter_type="tent", normalize_distance=False, offset=np.array([0.0, 0.0, 0.0])):
     #-------------------------SENSORS------------------------

@@ -174,8 +174,8 @@ def initialize_components():
     train_conf = OmegaConf.load('configs/train.yaml')    
 
     with time_measure("Loading dataset"):
-        dataset = Dataset(args.dataset_path)
-    
+        dataset = Dataset(args.dataset_path, train_iters=train_conf.optimizer.iterations if args.dash_reso_sche else None)
+
     with time_measure("Initializing gaussians"):
         gaussians = GaussianModel()
         if args.ply_path.endswith(".ply"):
