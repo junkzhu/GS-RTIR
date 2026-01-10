@@ -328,11 +328,32 @@ def metrics_relighting_envmap(envmap_name):
     np.savez(save_path, **metrics)
     print(f"[INFO] Metrics saved to {save_path}")
 
+    return metrics["psnr_rgb_mean"], metrics["ssim_rgb_mean"], metrics["lpips_rgb_mean"]
+
 if __name__ == "__main__":
     
-    metrics_training_envmap()
+    try:
+        metrics_training_envmap()
+    except:
+        print("[WARN] Metrics training images failed.")
 
     if args.relight:
+        psnr_rgb_list, ssim_rgb_list, lpips_rgb_list = [], [], []
+        
         envmap_name_list = get_relighting_envmap_names(args.envmap_root)
         for envmap_name in envmap_name_list:
-            metrics_relighting_envmap(envmap_name)
+            try:
+                psnr_rgb_mean, ssim_rgb_mean, lpips_rgb_mean = metrics_relighting_envmap(envmap_name)
+ 
+                psnr_rgb_list.append(psnr_rgb_mean)
+                ssim_rgb_list.append(ssim_rgb_mean)
+                lpips_rgb_list.append(lpips_rgb_mean)
+            
+            except:
+                print(f"[WARN] Metrics relighting {envmap_name} failed.")
+                continue
+
+        print(f"\n=== Average Relighting Metrics ===")
+        print(f"PSNR (RGB):       {np.mean(psnr_rgb_list):.3f}")
+        print(f"SSIM (RGB):       {np.mean(ssim_rgb_list):.3f}")
+        print(f"LPIPS (RGB):      {np.mean(lpips_rgb_list):.3f}")
