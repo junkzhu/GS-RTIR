@@ -190,3 +190,124 @@ def envmap_reg(opt, n_sg):
     except KeyError:
         # envmap optimization is disabled, opt has no SG params
         return 0.0
+    
+def global_ssim(img1, img2, eps=1e-8):
+    x = dr.ravel(img1)
+    y = dr.ravel(img2)
+
+    mu_x = dr.mean(x)
+    mu_y = dr.mean(y)
+
+    var_x = dr.mean((x - mu_x) ** 2)
+    var_y = dr.mean((y - mu_y) ** 2)
+    cov   = dr.mean((x - mu_x) * (y - mu_y))
+
+    C1 = 0.01 ** 2
+    C2 = 0.03 ** 2
+
+    return ((2 * mu_x * mu_y + C1) *
+            (2 * cov + C2)) / \
+           ((mu_x**2 + mu_y**2 + C1) *
+            (var_x + var_y + C2 + eps))
+
+def ssim_patch(img1_patch, img2_patch, eps=1e-8):
+    """
+    Compute SSIM between two 11x11x3 patches
+    """
+    x = dr.ravel(img1_patch)
+    y = dr.ravel(img2_patch)
+
+    mu_x = dr.mean(x)
+    mu_y = dr.mean(y)
+
+    var_x = dr.mean((x - mu_x) ** 2)
+    var_y = dr.mean((y - mu_y) ** 2)
+    cov   = dr.mean((x - mu_x) * (y - mu_y))
+
+    C1 = 0.01 ** 2
+    C2 = 0.03 ** 2
+
+    return ((2 * mu_x * mu_y + C1) *
+            (2 * cov + C2)) / \
+           ((mu_x**2 + mu_y**2 + C1) *
+            (var_x + var_y + C2 + eps))
+
+
+def dssim_patch(img1_patch, img2_patch):
+    """
+    Compute D-SSIM between two 11x11x3 patches
+    """
+    return 0.5 * (1.0 - ssim_patch(img1_patch, img2_patch))
+
+
+def random_sampling_dssim(img1, img2, num_samples=64, kernel_size=11):
+    """
+    Compute D-SSIM using random sampling of 11x11 patches from non-edge regions
+    
+    Args:
+        img1, img2: Input images (H, W, 3) as drjit tensors
+        num_samples: Number of random patches to sample
+        kernel_size: Size of the SSIM kernel (fixed at 11)
+        
+    Returns:
+        Average D-SSIM value over all samples
+    """
+    assert kernel_size == 11, "Only 11x11 kernel is supported"
+    
+    H, W, C = dr.shape(img1)
+    assert H == dr.shape(img2)[0] and W == dr.shape(img2)[1], "Images must have the same size"
+    assert H >= 11 and W >= 11, "Images must be at least 11x11"
+    
+    # Generate random sample coordinates (avoiding edges) using numpy
+    x_coords = np.random.randint(5, W - 5, num_samples)
+    y_coords = np.random.randint(5, H - 5, num_samples)
+    
+    total_dssim = 0.0
+    
+    # Process each sample
+    for i in range(num_samples):
+        x_i = x_coords[i]
+        y_i = y_coords[i]
+        
+        # Extract 11x11 patches
+        patch1 = img1[y_i-5:y_i+6, x_i-5:x_i+6, :]
+        patch2 = img2[y_i-5:y_i+6, x_i-5:x_i+6, :]
+        
+        # Compute D-SSIM for this patch
+        total_dssim += dssim_patch(patch1, patch2)
+    
+    return total_dssim / num_samples
+
+
+def random_dssim(img1, img2):
+    """
+    Clean interface for random sampling D-SSIM
+    
+    Args:
+        img1, img2: Input images (H, W, 3) as drjit tensors
+        
+    Returns:
+        Average D-SSIM value over 20 random samples
+    """
+    return random_sampling_dssim(img1, img2, num_samples=20)
+
+def dssim(img1, img2, num_samples=64, convert_to_srgb=False):
+    """
+    Compute D-SSIM as a weighted combination of global and random patch-based D-SSIM
+    
+    Args:
+        img1, img2: Input images (H, W, 3) as drjit tensors
+        num_samples: Number of random patches to sample
+
+    Returns:
+        Combined D-SSIM value
+    """
+    if convert_to_srgb:
+        img1 = dr.linear_to_srgb(img1)
+        img2 = dr.linear_to_srgb(img2)
+
+    global_dssim = 0.5 * (1.0 - global_ssim(img1, img2))
+
+    random_patch_dssim = random_sampling_dssim(img1, img2, num_samples=num_samples)
+    
+    return 0.2 * random_patch_dssim + 0.8 * random_patch_dssim
