@@ -4,6 +4,48 @@ import numpy as np
 from plyfile import PlyData, PlyElement
 from typing import Dict, Tuple
 
+def rotmat_to_quat(R):
+    trace = R[0,0] + R[1,1] + R[2,2]
+
+    if trace > 0:
+        s = torch.sqrt(trace + 1.0) * 2
+        w = 0.25 * s
+        x = (R[2,1] - R[1,2]) / s
+        y = (R[0,2] - R[2,0]) / s
+        z = (R[1,0] - R[0,1]) / s
+    elif (R[0,0] > R[1,1]) and (R[0,0] > R[2,2]):
+        s = torch.sqrt(1.0 + R[0,0] - R[1,1] - R[2,2]) * 2
+        w = (R[2,1] - R[1,2]) / s
+        x = 0.25 * s
+        y = (R[0,1] + R[1,0]) / s
+        z = (R[0,2] + R[2,0]) / s
+    elif R[1,1] > R[2,2]:
+        s = torch.sqrt(1.0 + R[1,1] - R[0,0] - R[2,2]) * 2
+        w = (R[0,2] - R[2,0]) / s
+        x = (R[0,1] + R[1,0]) / s
+        y = 0.25 * s
+        z = (R[1,2] + R[2,1]) / s
+    else:
+        s = torch.sqrt(1.0 + R[2,2] - R[0,0] - R[1,1]) * 2
+        w = (R[1,0] - R[0,1]) / s
+        x = (R[0,2] + R[2,0]) / s
+        y = (R[1,2] + R[2,1]) / s
+        z = 0.25 * s
+
+    return torch.stack([w, x, y, z])
+
+def quat_mul(q1, q2):
+    # q = (w,x,y,z)
+    w1,x1,y1,z1 = q1[...,0], q1[...,1], q1[...,2], q1[...,3]
+    w2,x2,y2,z2 = q2[...,0], q2[...,1], q2[...,2], q2[...,3]
+
+    return torch.stack([
+        w1*w2 - x1*x2 - y1*y2 - z1*z2,
+        w1*x2 + x1*w2 + y1*z2 - z1*y2,
+        w1*y2 - x1*z2 + y1*w2 + z1*x2,
+        w1*z2 + x1*y2 - y1*x2 + z1*w2
+    ], dim=-1)
+
 class GaussianModel:
     def __init__(self) -> None:
         self.active_sh_degree = 0
@@ -321,3 +363,42 @@ class GaussianModel:
 
         scale = torch.from_numpy(np.array(scale))
         self._albedo = self._albedo * scale
+
+    def translate(self, translate):
+        new_xyz = self._xyz
+        new_xyz = new_xyz + translate
+        self._xyz = new_xyz
+
+    def scale(self, scale):
+        new_xyz = self._xyz
+        mean_xyz = torch.mean(new_xyz,0)
+        new_xyz = new_xyz - mean_xyz
+        new_xyz = new_xyz * scale
+        self._xyz = new_xyz + mean_xyz
+
+        # scale gaussians scale
+        new_scaling = self._scaling * scale
+        self._scaling = new_scaling
+
+    def rotate(self, rotmat):
+        self.rotate_xyz(rotmat)
+        self.rotate_rot(rotmat)
+        self.rotate_normal(rotmat)
+
+    def rotate_xyz(self, rotmat):
+        new_xyz = self._xyz
+        mean_xyz = torch.mean(new_xyz,0)
+        new_xyz = new_xyz - mean_xyz
+        new_xyz = new_xyz @ rotmat.T
+        self._xyz = new_xyz + mean_xyz
+    
+    def rotate_rot(self, rotmat):
+        qR = rotmat_to_quat(rotmat).to(self._rotation.device)
+        qR = qR.unsqueeze(0).expand(self._rotation.shape[0], -1)
+        
+        rot = torch.roll(self._rotation, shifts=1, dims=1)
+        rot = quat_mul(qR, rot)
+        self._rotation = torch.roll(rot, shifts=-1, dims=1)
+
+    def rotate_normal(self, rotmat):
+        self._normal = self._normal @ rotmat.T
