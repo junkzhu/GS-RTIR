@@ -51,7 +51,7 @@ def make_sensor(
 
     return sensor
 
-def set_scene_config():
+def set_scene_config(envmap_path):
     scene_config = {
         'type': 'scene',
         'integrator': {
@@ -94,9 +94,31 @@ def set_scene_config():
     scene_config['emitter'] = {
         'type': 'envmap',
         'id': 'EnvironmentMapEmitter',
-        'filename': args.envmap_path, #TODO:修改成--envmap_path
+        'filename': envmap_path,
         'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 0) @
                     mi.ScalarTransform4f.rotate([1, 0, 0], 90)
+    }
+
+    # scene_config['point_light'] = {
+    #     'type': 'point',
+    #     'position': [0, 0, 3],
+    #     'intensity': {
+    #         'type': 'spectrum',
+    #         'value': 10.0,
+    #     }
+    # }
+
+    scene_config['sphere_area_light'] = {
+        'type': 'sphere',
+        'center': [0, 0, 1],
+        'radius': 0.3,
+        'emitter': {
+            'type': 'area',
+            'radiance': {
+                'type': 'rgb',
+                'value': 10.0,
+            }
+        }
     }
     
     return scene_config
@@ -398,6 +420,7 @@ def render_define_scene(scene_dict, render_spp):
 if __name__ == "__main__":
     render_spp = 32
     dataset_path = '/home/zjk/datasets/TensoIR/lego'
+    envmap_path = '/home/zjk/datasets/bloem_train_track_cloudy_4k.exr'
     
     # Render switch: True to use dataset sensors, False to use predefined sensor
     use_dataset_render = False
@@ -484,7 +507,7 @@ if __name__ == "__main__":
             all_gaussians_attributes.append(gaussians_attrs)
         
         # Create scene config
-        scene_config = set_scene_config()
+        scene_config = set_scene_config(envmap_path)
         # Add gaussians to scene
         scene_config = add_gaussian_config(scene_config, all_gaussians_attributes)
         

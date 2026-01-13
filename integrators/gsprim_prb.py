@@ -181,22 +181,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             aov_D[~mask_pt] += D_wo_rt
 
         # ray tracing
-        A_cur_raw, R_cur_raw, M_cur_raw, D_cur_raw, N_cur_raw, hit_valid, ray_valid, weight_acc, ray_depth = self.ray_marching_loop(scene, sampler, True, ray_cur, δA, δR, δM, δD, δN, state_in, active)    
-
-        state_cur = {
-            'albedo': dr.select(active, A_cur_raw, 0.0),
-            'roughness': dr.select(active, R_cur_raw, 0.0),
-            'metallic': dr.select(active, M_cur_raw, 0.0),
-            'depth': dr.select(active, D_cur_raw, 0.0),
-            'normal': dr.select(active, N_cur_raw, 0.0),
-            'weight_acc': dr.select(active, weight_acc, 0.0)
-        }
-        
-        A_cur = self.safe_clamp(A_cur_raw, 0.0, 1.0)
-        R_cur = self.safe_clamp(R_cur_raw, 0.0, 1.0)
-        M_cur = self.safe_clamp(M_cur_raw, 0.0, 1.0)
-        N_cur = self.safe_normalize(N_cur_raw)
-        D_cur = D_cur_raw
+        A_cur, R_cur, M_cur, N_cur, D_cur, hit_valid, ray_valid, ray_depth, state_cur = self.ray_intersect(scene, sampler, ray, active)
 
         si_cur = self.SurfaceInteraction3f(ray_cur, D_cur, N_cur, hit_valid)
         active &= si_cur.is_valid()
@@ -218,9 +203,10 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             'normal': aov_N
         }
 
-        # show emitter
-        if (not self.hide_emitters) and scene.environment() is not None:
-            result[mask_pt] += dr.select(hit_valid, 0.0, dr.detach(scene.environment().eval(si_cur)))
+        if not self.hide_emitters:
+            si_e = self.ray_intersect_emitter(scene, ray_cur, ray_valid)
+            emitter = si_e.emitter(scene)            
+            result += dr.select(hit_valid, 0.0, emitter.eval(si_e))
 
         active_prev = mi.Bool(active)
         while dr.hint(active, max_iterations=self.max_depth, label="Path Replay Backpropagation (%s)" % mode.name):
@@ -233,13 +219,12 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                     dr.enable_grad(A_cur, R_cur, M_cur, D_cur, N_cur)
                     dr.disable_grad(si_prev)
             
-            with dr.resume_grad(when=not primal):  
-                si_e = dr.zeros(mi.SurfaceInteraction3f)
-                si_e.wi = -ray_cur.d
-                emitter_val = dr.select(ray_valid, scene.environment().eval(si_e), 0.0)
+            with dr.resume_grad(when=not primal):
+                si_e = self.ray_intersect_emitter(scene, ray_cur, ray_valid)
+                emitter = si_e.emitter(scene)
+                    
+                emitter_val = dr.select(ray_valid, emitter.eval(si_e), 0.0)
                 Le = dr.select(first_vertex, 0.0, β * mis_em * emitter_val)
-                
-                #Le = dr.select(si_cur.is_valid(), β * mis_em * si_cur.emitter(scene).eval(si_cur), 0.0)
            
             active_next &= (depth + 1 < self.max_depth) & si_cur.is_valid()
             # Next event estimation
@@ -298,24 +283,9 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             ray_next_valid = dr.dot(N_cur, ray_next.d) > 0.0
             active_next &= ray_next_valid
 
-            A_next_raw, R_next_raw, M_next_raw, D_next_raw, N_next_raw, hit_valid_next, ray_next_valid, weight_acc_next, ray_depth_next = self.ray_marching_loop(scene, sampler, True, ray_next, δA, δR, δM, δD, δN, state_in, active_next)
+            A_next, R_next, M_next, N_next, D_next, hit_valid_next, ray_next_valid, ray_depth_next, state_next = self.ray_intersect(scene, sampler, ray_next, active_next)
             
             ray_next_valid = ray_next_valid & ~hit_valid_next
-
-            state_next = {
-                'albedo': dr.select(active, A_next_raw, 0.0),
-                'roughness': dr.select(active, R_next_raw, 0.0),
-                'metallic': dr.select(active, M_next_raw, 0.0),
-                'depth': dr.select(active, D_next_raw, 0.0),
-                'normal': dr.select(active, N_next_raw, 0.0),
-                'weight_acc': dr.select(active, weight_acc_next, 0.0)
-            }
-
-            A_next = self.safe_clamp(A_next_raw, 0.0, 1.0)
-            R_next = self.safe_clamp(R_next_raw, 0.0, 1.0)
-            M_next = self.safe_clamp(M_next_raw, 0.0, 1.0)
-            N_next = self.safe_normalize(N_next_raw)
-            D_next = D_next_raw
             
             si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, hit_valid_next)
 

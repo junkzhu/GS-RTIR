@@ -178,7 +178,7 @@ def metrics_training_envmap():
             to_torch_image(albedo_img).to(device).squeeze(0)
         )
 
-        if args.dataset_type == "TensoIR":
+        if args.dataset_type in ["TensoIR", "RTIR"]:
             ref_normal    = dataset.ref_normal_images[idx][sensor.film().crop_size()[0]]
             ref_normal = np.asarray(ref_normal, dtype=np.float32)
 
@@ -245,7 +245,7 @@ def metrics_training_envmap():
 
     print(f"L2 (Roughness):   {np.mean(metrics['l2_roughness']):.4f}")
     
-    if args.dataset_type == "TensoIR":
+    if args.dataset_type in ["TensoIR", "RTIR"]:
         metrics["lmae_normal_mean"] = float(np.mean(metrics['lmae_normal']))
         print(f"LMAE (Normal):    {np.mean(metrics['lmae_normal']):.4f}")
 

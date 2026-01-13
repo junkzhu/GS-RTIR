@@ -322,7 +322,7 @@ def compute_metrics(img, ref_img, aovs, dataset, sensor, idx, normal_mask):
     roughness_mse = None
     normal_mae = None
 
-    if args.dataset_type == "TensoIR":
+    if args.dataset_type in ["TensoIR", "RTIR"]:
         albedo_img = aovs['albedo'][:, :, :3]
         roughness_img = aovs['roughness'][:, :, :1]
         normal_img = aovs['normal'][:, :, :3]
@@ -360,7 +360,7 @@ def save_iteration_results(i, scene_dict, params, train_conf, loss_list, rgb_PSN
         plot_loss(loss_list, label='Total Loss', output_file=join(OUTPUT_DIR, 'total_loss.png'))
         plot_loss(rgb_PSNR_list, label = "RGB PSNR", output_file=join(OUTPUT_DIR, 'rgb_psnr.png'))
         
-        if args.dataset_type == "TensoIR":
+        if args.dataset_type in ["TensoIR", "RTIR"]:
             plot_loss(albedo_PSNR_list, label='Albedo PSNR', output_file=join(OUTPUT_DIR, 'albedo_psnr.png'))
             plot_loss(roughness_MSE_list, label='Roughness MSE', output_file=join(OUTPUT_DIR, 'roughness_mse.png'))
             plot_loss(normal_MAE_list, label='Normal MAE', output_file=join(OUTPUT_DIR, 'normal_mae.png'))
@@ -418,7 +418,7 @@ def train_loop(train_conf, dataset, gaussians, kdtree_idx, gsstrategy, scene_dic
             )
             
             rgb_psnr += rgb_psnr_iter
-            if args.dataset_type == "TensoIR":
+            if args.dataset_type in ["TensoIR", "RTIR"]:
                 albedo_psnr += albedo_psnr_iter
                 roughness_mse += roughness_mse_iter
                 normal_mae += normal_mae_iter
@@ -427,7 +427,7 @@ def train_loop(train_conf, dataset, gaussians, kdtree_idx, gsstrategy, scene_dic
         loss_list.append(np.asarray(total_loss))
         rgb_PSNR_list.append(np.asarray(rgb_psnr))
 
-        if args.dataset_type == "TensoIR":
+        if args.dataset_type in ["TensoIR", "RTIR"]:
             normal_MAE_list.append(np.asarray(normal_mae))
             albedo_PSNR_list.append(np.asarray(albedo_psnr))
             roughness_MSE_list.append(np.asarray(roughness_mse))
@@ -442,7 +442,7 @@ def train_loop(train_conf, dataset, gaussians, kdtree_idx, gsstrategy, scene_dic
         loss_str = f'Loss: {loss_np[0]:.4f}'
         pbar.set_description(loss_str)
 
-        if args.dataset_type == "TensoIR":
+        if args.dataset_type in ["TensoIR", "RTIR"]:
             pbar.set_postfix({'rgb': rgb_psnr, 'albedo': albedo_psnr, 'roughness': roughness_mse, 'normal': normal_mae})
         else:
             pbar.set_postfix({'rgb': rgb_psnr})

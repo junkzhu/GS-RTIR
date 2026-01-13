@@ -182,6 +182,64 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return ray
 
     @dr.syntax
+    def ray_intersect(self, scene, sampler, ray, active):
+        ray = mi.Ray3f(ray)
+        
+        # 光线先与3D Gaussian求交
+        A_raw, R_raw, M_raw, D_raw, N_raw, hit_valid, ray_valid, weight_acc, ray_depth = self.ray_marching_loop(scene, sampler, True, ray, None, None, None, None, None, None, active)    
+
+        state_out = {
+            'albedo': dr.select(active, A_raw, 0.0),
+            'roughness': dr.select(active, R_raw, 0.0),
+            'metallic': dr.select(active, M_raw, 0.0),
+            'depth': dr.select(active, D_raw, 0.0),
+            'normal': dr.select(active, N_raw, 0.0),
+            'weight_acc': dr.select(active, weight_acc, 0.0)
+        }
+
+        A_gs = self.safe_clamp(A_raw, 0.0, 1.0)
+        R_gs = self.safe_clamp(R_raw, 0.0, 1.0)
+        M_gs = self.safe_clamp(M_raw, 0.0, 1.0)
+        N_gs = self.safe_normalize(N_raw)
+        D_gs = D_raw
+
+        # 如果光线没有和3D Gaussian相交，仍然有效，继续判断是否与mesh相交；
+        # 若光线在Gaussian求交逻辑中直接和mesh相交，不影响transmittance，光线依然有效，依然会执行这个。
+        ray_o, ray_d = dr.copy(ray.o), dr.copy(ray.d)
+        si_mesh = scene.ray_intersect(ray, active)
+        
+        # 如果光线先和GS相交，执行mesh检测逻辑，跳过表面GS
+        mesh_detection_active = ~hit_valid & si_mesh.is_valid() & si_mesh.shape.is_ellipsoids()
+        while dr.hint(mesh_detection_active, label=f"Mesh Intersect Skip Gaussians"):
+            ray.o = si_mesh.p + ray.d * 1e-6
+            si_mesh = scene.ray_intersect(ray, mesh_detection_active)
+            mesh_detection_active &= (si_mesh.is_valid() & si_mesh.shape.is_ellipsoids())
+
+        mesh_active = ~hit_valid & si_mesh.is_valid() & ~si_mesh.shape.is_ellipsoids() & ~si_mesh.shape.is_emitter()
+
+        A_mesh = si_mesh.bsdf(ray).eval_diffuse_reflectance(si_mesh, mesh_active)
+        R_mesh = si_mesh.bsdf(ray).eval_attribute_1("roughness", si_mesh, mesh_active)
+        M_mesh = si_mesh.bsdf(ray).eval_attribute_1("metallic", si_mesh, mesh_active)
+        N_mesh = dr.select(mesh_active, mi.Spectrum(si_mesh.n), mi.Spectrum(0.0))
+        D_mesh = dr.select(mesh_active, mi.Spectrum(dr.dot(si_mesh.p - ray_o, ray_d)), mi.Spectrum(0.0))
+
+        # 明确第一跳有效交点
+        hit_valid = active & hit_valid | mesh_active
+
+        # 明确下一跳光线的有效性
+        ray_valid = active & ray_valid & ~hit_valid
+
+        # 统一获取Gbuffer Output
+        A = dr.select(~mesh_active, A_gs, A_mesh)
+        R = dr.select(~mesh_active, R_gs, R_mesh)
+        M = dr.select(~mesh_active, M_gs, M_mesh)
+        N = dr.select(~mesh_active, N_gs, N_mesh)
+        D = dr.select(~mesh_active, D_gs, D_mesh)
+        ray_depth = dr.select(~mesh_active, ray_depth, mi.Float(0.0))
+
+        return A, R, M, N, D, hit_valid, ray_valid, ray_depth, state_out
+
+    @dr.syntax
     def shadow_ray_test(self, scene, sampler, ray, active):
         #Stochastic Ray Tracing of Transparent 3D Gaussians, 3.3 section
         active=mi.Mask(active)
@@ -191,6 +249,13 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         occluded = ~active
         while dr.hint(active, label=f"Shadow Ray Test"):
             si_cur = scene.ray_intersect(ray, coherent=True, ray_flags=mi.RayFlags.All, active=active)
+            
+            # 混合渲染补充：如果与mesh相交，且交点不是光源，直接视为不可见
+            intersect_mesh = si_cur.is_valid() & ~si_cur.shape.is_ellipsoids() & ~si_cur.shape.is_emitter()
+            occluded[active & intersect_mesh] = mi.Bool(True)
+            active &= ~intersect_mesh
+            
+            # Gaussian部分
             active &= si_cur.is_valid() & si_cur.shape.is_ellipsoids()
 
             self_occ = mi.Bool(False)
@@ -213,6 +278,20 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         return occluded
 
     #-------------------- 3DGS --------------------
+    @dr.syntax
+    def ray_intersect_emitter(self, scene, ray, active):
+        with dr.suspend_grad():
+            ray = mi.Ray3f(ray)
+            si = scene.ray_intersect(ray, active)
+
+            emitter_detection_active = active & si.is_valid() & si.shape.is_ellipsoids()
+            while dr.hint(emitter_detection_active, label=f"Skip Gaussians"):
+                ray.o = si.p + ray.d * 1e-6
+                si = scene.ray_intersect(ray, emitter_detection_active)
+                emitter_detection_active &= (si.is_valid() & si.shape.is_ellipsoids())
+
+        return si
+
     def eval_sh_emission(self, si, ray, active):
         """
         Evaluate the SH directionally emission on intersected volumetric primitives
