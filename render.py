@@ -55,13 +55,11 @@ def load_scene_config(gaussians_attributes, envmap_init_path, optimize_envmap):
             )
             
             scene_config['envmap'] = {
-                'type': 'vMF',
-                'filename': '/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
+                'type': 'SGEmitter',
                 'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
                             mi.ScalarTransform4f.rotate([1, 0, 0], 90)
             }
             OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
-            OPTIMIZE_PARAMS += ['envmap.position'] + ['envmap.weight'] + ['envmap.std']
         
         else:
             scene_config['envmap'] = {
