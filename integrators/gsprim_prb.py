@@ -284,9 +284,7 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
             active_next &= ray_next_valid
 
             A_next, R_next, M_next, N_next, D_next, hit_valid_next, ray_next_valid, ray_depth_next, state_next = self.ray_intersect(scene, sampler, ray_next, active_next)
-            
-            ray_next_valid = ray_next_valid & ~hit_valid_next
-            
+                        
             si_next = self.SurfaceInteraction3f(ray_next, D_next, N_next, hit_valid_next)
 
             # Compute MIS weight for the next vertex
@@ -367,6 +365,9 @@ class GaussianPrimitivePrbIntegrator(ReparamIntegrator):
                 δN_in = dr.select(first_vertex, δN_cur + δN, δN_cur)
 
                 self.ray_marching_loop(scene, sampler_clone, False, ray_cur, δA_in, δR_in, δM_in, δD_in, δN_in, state_cur, active_prev)
+                
+                if self.optimize_mesh:
+                    self.inject_mesh_gradient(scene, ray_cur, δA_in, δR_in, δM_in, δD_in, δN_in, state_cur, active_prev)
 
             depth[si_cur.is_valid()] += 1
             

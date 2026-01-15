@@ -189,11 +189,15 @@ class VolumetricPrimitiveRadianceFieldIntegrator(ReparamIntegrator):
                     Do = depth + Dr_ind
                     No = normal + Nr_ind
 
-                    Ao = dr.select(active & dr.isfinite(Ao), Ao, 0.0)
-                    Do = dr.select(active & dr.isfinite(Do), Do, 0.0)
-                    No = dr.select(active & dr.isfinite(No), No, 0.0)
+                    LA = δA * Ao
+                    LD = δD * Do
+                    LN = δN * No
 
-                    loss = δA * Ao + δD * Do + δN * No
+                    LA = dr.select(active & dr.isfinite(LA), LA, 0.0)
+                    LD = dr.select(active & dr.isfinite(LD), LD, 0.0)
+                    LN = dr.select(active & dr.isfinite(LN), LN, 0.0)
+
+                    loss = LA + LD + LN
                     dr.backward_from(loss)
             
             active &= si_cur.is_valid()

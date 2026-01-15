@@ -19,6 +19,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         self.selfocc_offset_max = props.get('selfocc_offset_max', -1)
         self.geometry_threshold = props.get('geometry_threshold', 0.5)
         self.separate_direct_indirect = props.get('separate_direct_indirect', False)
+        self.optimize_mesh = props.get('optimize_mesh', False)
         
         if self.selfocc_offset_max < 0:
             self.selfocc_offset_max = float(1e8)
@@ -194,7 +195,8 @@ class ReparamIntegrator(mi.SamplingIntegrator):
             'metallic': dr.select(active, M_raw, 0.0),
             'depth': dr.select(active, D_raw, 0.0),
             'normal': dr.select(active, N_raw, 0.0),
-            'weight_acc': dr.select(active, weight_acc, 0.0)
+            'weight_acc': dr.select(active, weight_acc, 0.0),
+            'hit_valid': dr.select(active, hit_valid, False)
         }
 
         A_gs = self.safe_clamp(A_raw, 0.0, 1.0)
@@ -606,13 +608,19 @@ class ReparamIntegrator(mi.SamplingIntegrator):
                     Do = depth + Dr_ind
                     No = normal + Nr_ind
 
-                    Ao = dr.select(active & dr.isfinite(Ao), Ao, 0.0)
-                    Ro = dr.select(active & dr.isfinite(Ro), Ro, 0.0)
-                    Mo = dr.select(active & dr.isfinite(Mo), Mo, 0.0)
-                    Do = dr.select(active & dr.isfinite(Do), Do, 0.0)
-                    No = dr.select(active & dr.isfinite(No), No, 0.0)
+                    LA = δA * Ao
+                    LR = δR * Ro
+                    LM = δM * Mo
+                    LD = δD * Do
+                    LN = δN * No
 
-                    loss = δA * Ao + δR * Ro + δM * Mo + δD * Do + δN * No
+                    LA = dr.select(active & dr.isfinite(LA), LA, 0.0)
+                    LR = dr.select(active & dr.isfinite(LR), LR, 0.0)
+                    LM = dr.select(active & dr.isfinite(LM), LM, 0.0)
+                    LD = dr.select(active & dr.isfinite(LD), LD, 0.0)
+                    LN = dr.select(active & dr.isfinite(LN), LN, 0.0)
+
+                    loss = LA + LR + LM + LD + LN
                     dr.backward_from(loss)
             
             active &= si_cur.is_valid()
@@ -648,7 +656,43 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         ray_depth = dr.select(D > seg_l, D - seg_l, 0.0)
 
+        #Abalation study: Geometry judgement
+        #hit_active = ~ray_active
+
         return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, hit_active, ray_active, weight_acc, ray_depth
+
+    @dr.syntax
+    def inject_mesh_gradient(self, scene, ray, δA_in, δR_in, δM_in, δD_in, δN_in, state, active):           
+        ray = mi.Ray3f(ray)
+        si_mesh = scene.ray_intersect(ray, active)
+
+        δA = mi.Spectrum(δA_in)
+        δR = mi.Spectrum(δR_in)
+        δM = mi.Spectrum(δM_in)
+
+        mesh_detection_active = ~state['hit_valid'] & si_mesh.is_valid() & si_mesh.shape.is_ellipsoids()
+        while dr.hint(mesh_detection_active, label=f"Mesh Intersect Skip Gaussians"):
+            ray.o = si_mesh.p + ray.d * 1e-6
+            si_mesh = scene.ray_intersect(ray, mesh_detection_active)
+            mesh_detection_active &= (si_mesh.is_valid() & si_mesh.shape.is_ellipsoids())
+
+        mesh_active = ~state['hit_valid'] & si_mesh.is_valid() & ~si_mesh.shape.is_ellipsoids() & ~si_mesh.shape.is_emitter()
+
+        with dr.resume_grad():
+            bsdf = si_mesh.bsdf(ray)
+            A_mesh = bsdf.eval_diffuse_reflectance(si_mesh, mesh_active)
+            R_mesh = bsdf.eval_attribute_1("roughness", si_mesh, mesh_active)
+            M_mesh = bsdf.eval_attribute_1("metallic", si_mesh, mesh_active)
+            
+            Ao = A_mesh * δA
+            Ro = R_mesh * δR
+            Mo = M_mesh * δM
+            
+            Ao = dr.select(mesh_active & dr.isfinite(Ao), Ao, 0.0)
+            Ro = dr.select(mesh_active & dr.isfinite(Ro), Ro, 0.0)
+            Mo = dr.select(mesh_active & dr.isfinite(Mo), Mo, 0.0)
+
+            dr.backward_from(Ao + Ro + Mo)
 
     #-------------------- BSDF --------------------
     def fresnel_schlick(self, F0, cosTheta):

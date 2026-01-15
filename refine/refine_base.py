@@ -176,12 +176,12 @@ class RefineBase:
             self.update_params()
             
             # Scale value restraint
-            data = self.params['shape.data']
-            data_np = np.array(data)
-            N = data_np.shape[0] // 10
-            data_np = data_np.reshape(N, 10)
-            data_np[:, 3:6] = np.clip(data_np[:, 3:6], 1e-3, 0.05)
-            self.params['shape.data'] = dr.cuda.ad.Float(data_np.reshape(-1))
+            # data = self.params['shape.data']
+            # data_np = np.array(data)
+            # N = data_np.shape[0] // 10
+            # data_np = data_np.reshape(N, 10)
+            # data_np[:, 3:6] = np.clip(data_np[:, 3:6], 1e-3, 0.05)
+            # self.params['shape.data'] = dr.cuda.ad.Float(data_np.reshape(-1))
             
             self.dataset.update_sensors(self.i)
             
