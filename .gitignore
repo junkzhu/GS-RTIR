@@ -14,4 +14,7 @@ outputs
 emitter/output
 emitter/SGEmitter.py
 
+demos/scenes
+demos/ablation_study/outputs
+
 *.out
