@@ -58,13 +58,11 @@ def load_scene_config():
             )
             
             scene_config['envmap'] = {
-                'type': 'vMF',
-                'filename': '/home/zjk/datasets/TensoIR/Environment_Maps/high_res_envmaps_1k/sunset.hdr',
+                'type': 'SGEmitter',
                 'to_world': mi.ScalarTransform4f.rotate([0, 0, 1], 90) @
                             mi.ScalarTransform4f.rotate([1, 0, 0], 90)
             }
             OPTIMIZE_PARAMS += ['envmap.lgtSGs*']
-            OPTIMIZE_PARAMS += ['envmap.position'] + ['envmap.weight'] + ['envmap.std']
         
         else:
             scene_config['envmap'] = {
@@ -118,9 +116,6 @@ def register_optimizer(params, train_conf):
     # register envmap parameters
     if args.envmap_optimization:
         if args.spherical_gaussian:
-            opt['envmap.position'] = params['envmap.position']
-            opt['envmap.weight'] = params['envmap.weight']
-            opt['envmap.std'] = params['envmap.std']
             for i in range(args.num_sgs):
                 opt[f'envmap.lgtSGslobe_{i}']   = params[f'envmap.lgtSGslobe_{i}']
                 opt[f'envmap.lgtSGslambda_{i}'] = params[f'envmap.lgtSGslambda_{i}']
@@ -157,9 +152,6 @@ def update_params(opt, params):
     
     if args.envmap_optimization:
         if args.spherical_gaussian:
-            params['envmap.position'] = opt['envmap.position']
-            params['envmap.weight'] = opt['envmap.weight']
-            params['envmap.std'] = opt['envmap.std']
             for i in range(args.num_sgs):
                 params[f'envmap.lgtSGslobe_{i}']   = opt[f'envmap.lgtSGslobe_{i}']
                 params[f'envmap.lgtSGslambda_{i}'] = opt[f'envmap.lgtSGslambda_{i}']
@@ -174,8 +166,8 @@ def initialize_components():
     train_conf = OmegaConf.load('configs/train.yaml')    
 
     with time_measure("Loading dataset"):
-        dataset = Dataset(args.dataset_path)
-    
+        dataset = Dataset(args.dataset_path, train_iters=train_conf.optimizer.iterations if args.dash_reso_sche else None)
+
     with time_measure("Initializing gaussians"):
         gaussians = GaussianModel()
         if args.ply_path.endswith(".ply"):

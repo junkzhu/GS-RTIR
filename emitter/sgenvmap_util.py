@@ -10,6 +10,11 @@ import mitsuba as mi
 
 TINY_NUMBER = 1e-8
 
+def indent(name: str):
+    lines = name.split('\n')
+    lines[1:] = [f'  {x}' for x in lines[1:]]
+    return '\n'.join(lines)
+
 def fibonacci_sphere(samples):
     """
     https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere

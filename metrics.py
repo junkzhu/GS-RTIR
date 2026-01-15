@@ -50,6 +50,8 @@ def readImages(renders_dir):
         base_name = name_no_ext.split("_")[0]
 
         if base_name not in image_names:
+            if int(base_name) % args.stride != 0:
+                continue
             image_names.append(base_name)
 
     for idx, name in enumerate(image_names):
@@ -254,7 +256,7 @@ def metrics_training_envmap():
     print(f"[INFO] Metrics saved to {save_path}")
 
 def metrics_relighting_envmap(envmap_name):
-    dataset = Dataset(args.dataset_path, RENDER_UPSAMPLE_ITER, env=envmap_name, dataset_type="test", load_ref_relight_images=args.relight)
+    dataset = Dataset(args.dataset_path, render_upsampler_iters=RENDER_UPSAMPLE_ITER, env=envmap_name, dataset_type="test", load_ref_relight_images=args.relight)
 
     current_env_images_path = os.path.join(OUTPUT_RENDER_DIR, f'./relight/{envmap_name}')
     renders = read_RGB_images(current_env_images_path)

@@ -248,6 +248,8 @@ def opacity_entropy_loss(opacities: mi.Float):
     return -dr.mean(opacities * dr.log(opacities + eps) + (1 - opacities) * dr.log(1 - opacities + eps))
 
 def plot_loss(data, label, output_file):
+    import matplotlib
+    matplotlib.use('agg')
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(4, 4))
     ax.plot(data)
@@ -259,6 +261,7 @@ def plot_loss(data, label, output_file):
     plt.ylabel(label)
     plt.title(label + ' plot')
     plt.savefig(output_file)
+    plt.close(fig)
 
 def get_lgtSGs(params, num_sgs):
     envmap_template = """{% for i in range(num_sgs) %}

@@ -39,6 +39,8 @@ def get_args():
     parser.add_argument("--use_mis", type=str2bool, default=True, help="Enable MIS.")
     parser.add_argument("--max_bounce_num", type=int, default=4, help="The maximum number of bounces.")
     
+    parser.add_argument("--dash_reso_sche", type=str2bool, default=False, help="Resolution scheduler described in DashGaussian.")
+
     parser.add_argument("--training_spp", type=int, default=16, help="The number of samples per pixel for training.")
     parser.add_argument("--primal_spp_mult", type=int, default=4, help="The multiplier for primal samples per pixel.")
     parser.add_argument("--spp_pt_rate", type=float, default=1.0, help="The rate of ray tracing point samples per pixel.")
