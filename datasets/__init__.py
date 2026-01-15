@@ -50,7 +50,7 @@ class Dataset:
         if args.dataset_type == 'COLMAP':
             assert(1==2) #TODO COLMAP
         elif args.dataset_type in ["TensoIR", "RTIR"]:
-            self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images, self.ref_relight_images = sceneLoadTypeCallbacks["TensoIR"](
+            self.sensors, self.sensors_normal, self.sensors_intrinsic, self.ref_images, self.ref_albedo_images, self.ref_normal_images, self.ref_roughness_images, self.albedo_priors_images, self.roughness_priors_images, self.normal_priors_images, self.ref_relight_images, new_render_upsample_iter = sceneLoadTypeCallbacks["TensoIR"](
                 source_path, 'rgb', resx=self.target_res[0], resy=self.target_res[1], split=dataset_type, env=env, 
                 relight_envmap_names=self.relight_envmap_names, load_ref_relight_images=load_ref_relight_images, 
                 train_iters=train_iters, max_reso_scale_init=self.max_reso_scale_init,
