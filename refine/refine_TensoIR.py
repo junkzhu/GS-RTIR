@@ -43,7 +43,7 @@ class RefineTensoIR(RefineBase):
         normal_l2_loss = l2(ref_normal, normal_img) / self.dataset.batch_size
         
         # Total loss
-        total_loss = view_loss + normal_l2_loss
+        total_loss = normal_l2_loss
         
         # Backward pass
         dr.backward(total_loss)

@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# Example commands for direct execution
-# CUDA_VISIBLE_DEVICES=0 python refine/refine_Synthetic4Relight.py --dataset_type Synthetic4Relight --dataset_name jugs --dataset_path /home/zjk/datasets/Synthetic4Relight/jugs --ply_path /home/zjk/datasets/Synthetic4Relight/3dgrt/jugs.pt --refine_path /home/zjk/datasets/Synthetic4Relight/3dgrt/jugs_refined.ply
-# CUDA_VISIBLE_DEVICES=0 python train.py --dataset_type Synthetic4Relight --dataset_name jugs --dataset_path /home/zjk/datasets/Synthetic4Relight/jugs --ply_path /home/zjk/datasets/Synthetic4Relight/3dgrt/jugs_refined.ply --selfocc_offset_max 0.1 --geometry_threshold 0.3
-# CUDA_VISIBLE_DEVICES=0 python render.py --dataset_type Synthetic4Relight --dataset_name jugs --dataset_path /home/zjk/datasets/Synthetic4Relight/jugs --ply_path /home/zjk/code/GS-RTIR/outputs/Synthetic4Relight/jugs/ply/iter_299.ply --render_spp 64 --envmap_init_path /home/zjk/code/GS-RTIR/outputs/Synthetic4Relight/jugs/envmap/optimized_sgs_0299.npy --relight --envmap_root /home/zjk/datasets/Synthetic4Relight/Environment_Maps --selfocc_offset_max 0.1 --geometry_threshold 0.3
-# CUDA_VISIBLE_DEVICES=0 python metrics.py --dataset_type Synthetic4Relight --dataset_name jugs --dataset_path /home/zjk/datasets/Synthetic4Relight/jugs --envmap_root /home/zjk/datasets/Synthetic4Relight/Environment_Maps --relight
+# Example commands for direct execution (TensoIR dataset)
+# CUDA_VISIBLE_DEVICES=0 python refine/refine_TensoIR.py --dataset_type TensoIR --dataset_name lego --dataset_path /home/zjk/datasets/TensoIR/lego --ply_path /home/zjk/datasets/TensoIR/3dgrt/lego.pt --refine_path /home/zjk/datasets/TensoIR/3dgrt/lego_refined.ply
+# CUDA_VISIBLE_DEVICES=0 python train.py --dataset_type TensoIR --dataset_name lego --dataset_path /home/zjk/datasets/TensoIR/lego --ply_path /home/zjk/datasets/TensoIR/3dgrt/lego_refined.ply --selfocc_offset_max 0.1 --geometry_threshold 0.3
+# CUDA_VISIBLE_DEVICES=0 python render.py --dataset_type TensoIR --dataset_name lego --dataset_path /home/zjk/datasets/TensoIR/lego --ply_path /home/zjk/code/GS-RTIR/outputs/TensoIR/lego/ply/iter_299.ply --render_spp 64 --envmap_init_path /home/zjk/code/GS-RTIR/outputs/TensoIR/lego/envmap/optimized_sgs_0299.npy --relight --envmap_root /home/zjk/datasets/TensoIR/Environment_Maps --selfocc_offset_max 0.1 --geometry_threshold 0.3
+# CUDA_VISIBLE_DEVICES=0 python metrics.py --dataset_type TensoIR --dataset_name lego --dataset_path /home/zjk/datasets/TensoIR/lego --envmap_root /home/zjk/datasets/TensoIR/Environment_Maps --relight
 
 # Configuration variables
-CUDA_DEVICE="1"  # Default CUDA device, can be overridden by --cuda_device argument
-DATASET_TYPE="Synthetic4Relight"
-DATASET_ROOT="/home/zjk/datasets/Synthetic4Relight"
-OUTPUT_ROOT="/home/zjk/code/GS-RTIR/outputs/Synthetic4Relight"
-ENVIRONMENT_MAPS="/home/zjk/datasets/Synthetic4Relight/Environment_Maps"
-ITERATION="799"  # Default iteration number, can be overridden by --iteration argument
+CUDA_DEVICE="0"  # Default CUDA device, can be overridden by --cuda_device argument
+DATASET_TYPE="RTIR"
+DATASET_ROOT="/home/zjk/datasets/RTIR"
+OUTPUT_ROOT="/home/zjk/code/GS-RTIR/outputs/RTIR"
+ENVIRONMENT_MAPS="/home/zjk/datasets/RTIR/Environment_Maps"
+ITERATION="799"  # Default iteration number, can be overridden by command line argument
 
 # Enable/disable switches for each step
 enable_refine=true
@@ -23,37 +23,38 @@ enable_relight=false  # Switch for relight functionality
 
 # Scene-specific parameters
 declare -A SCENE_PARAMS
-SCENE_PARAMS[jugs,offset]="0.1"
-SCENE_PARAMS[jugs,geometry_threshold]="0.2"
+SCENE_PARAMS[plate,offset]="0.1"
+SCENE_PARAMS[plate,geometry_threshold]="0.2"
 
-SCENE_PARAMS[chair,offset]="0.1"
-SCENE_PARAMS[chair,geometry_threshold]="0.2"
+SCENE_PARAMS[bear,offset]="0.1"
+SCENE_PARAMS[bear,geometry_threshold]="0.2"
 
-SCENE_PARAMS[air_baloons,offset]="0.25"
-SCENE_PARAMS[air_baloons,geometry_threshold]="0.2"
+SCENE_PARAMS[wood_plate,offset]="0.1"
+SCENE_PARAMS[wood_plate,geometry_threshold]="0.2"
 
-SCENE_PARAMS[hotdog,offset]="0.1"
-SCENE_PARAMS[hotdog,geometry_threshold]="0.2"
+SCENE_PARAMS[teacup,offset]="0.15"
+SCENE_PARAMS[teacup,geometry_threshold]="0.2"
 
 # Function to run refine for a scene
 run_refine() {
     local scene=$1
-    # Extract base scene name by removing any trailing digits
+    # Extract base scene name (e.g., "lego" from "lego2")
     local base_scene=$(echo $scene | sed 's/[0-9]*$//')
-    echo "Running refine for $scene (base: $base_scene)..."
-    CUDA_VISIBLE_DEVICES=$CUDA_DEVICE python refine/refine_Synthetic4Relight.py \
+    echo "Running refine for $scene..."
+    CUDA_VISIBLE_DEVICES=$CUDA_DEVICE python refine/refine_TensoIR.py \
         --dataset_type $DATASET_TYPE \
-        --dataset_name $base_scene \
+        --dataset_name $scene \
         --dataset_path $DATASET_ROOT/$base_scene \
         --ply_path $DATASET_ROOT/3dgrt/${base_scene}.pt \
-        --refine_path $DATASET_ROOT/3dgrt/${base_scene}_refined.ply
+        --refine_path $DATASET_ROOT/3dgrt/${scene}_refined.ply
 }
 
 # Function to run train for a scene
 run_train() {
     local scene=$1
-    # Extract base scene name by removing any trailing digits
+    # Extract base scene name (e.g., "lego" from "lego2")
     local base_scene=$(echo $scene | sed 's/[0-9]*$//')
+    # Use base scene parameters if available, otherwise use defaults
     local offset=${SCENE_PARAMS[$base_scene,offset]:-"0.1"}
     local geometry_threshold=${SCENE_PARAMS[$base_scene,geometry_threshold]:-"0.3"}
     echo "Running train for $scene (base: $base_scene)..."
@@ -69,12 +70,13 @@ run_train() {
 # Function to run render for a scene
 run_render() {
     local scene=$1
-    # Extract base scene name by removing any trailing digits
+    # Extract base scene name (e.g., "lego" from "lego2")
     local base_scene=$(echo $scene | sed 's/[0-9]*$//')
+    # Use base scene parameters if available, otherwise use defaults
     local offset=${SCENE_PARAMS[$base_scene,offset]:-"0.1"}
     local geometry_threshold=${SCENE_PARAMS[$base_scene,geometry_threshold]:-"0.3"}
     local iter_padded=$(printf "%04d" $ITERATION)
-    echo "Running render for $scene (base: $base_scene) with iteration $ITERATION..."
+    echo "Running render for $scene with iteration $ITERATION..."
     
     # Build render command with optional relight flag
     local render_cmd="CUDA_VISIBLE_DEVICES=$CUDA_DEVICE python render.py \
@@ -87,8 +89,7 @@ run_render() {
     
     if [ "$enable_relight" = true ]; then
         render_cmd="$render_cmd \
-        --relight \
-        --envmap_root $ENVIRONMENT_MAPS"
+        --relight"
     fi
     
     render_cmd="$render_cmd \
@@ -102,9 +103,9 @@ run_render() {
 # Function to run metrics for a scene
 run_metrics() {
     local scene=$1
-    # Extract base scene name by removing any trailing digits
+    # Extract base scene name (e.g., "lego" from "lego2")
     local base_scene=$(echo $scene | sed 's/[0-9]*$//')
-    echo "Running metrics for $scene (base: $base_scene)..."
+    echo "Running metrics for $scene..."
     
     # Build metrics command with optional relight flag
     local metrics_cmd="CUDA_VISIBLE_DEVICES=$CUDA_DEVICE python metrics.py \
@@ -114,7 +115,6 @@ run_metrics() {
     
     if [ "$enable_relight" = true ]; then
         metrics_cmd="$metrics_cmd \
-        --envmap_root $ENVIRONMENT_MAPS \
         --relight"
     fi
     
@@ -156,23 +156,29 @@ run_all() {
 }
 
 # Parse command line arguments
-# Initialize scene_names array to hold scene names
+# Separate scene names from option arguments
 scene_names=()
-
-# Parse all arguments to separate options and scene names
 while [[ $# -gt 0 ]]; do
-    case $1 in
+    case "$1" in
         --cuda_device)
             CUDA_DEVICE="$2"
+            echo "Using CUDA device: $CUDA_DEVICE"
             shift 2
             ;;
         --iteration)
             ITERATION="$2"
+            echo "Using iteration: $ITERATION"
             shift 2
             ;;
         *)
-            # This is a scene name, add to scene_names array
-            scene_names+=($1)
+            # Check if it's a number (old iteration syntax support)
+            if [[ "$1" =~ ^[0-9]+$ ]]; then
+                ITERATION="$1"
+                echo "Using iteration: $ITERATION"
+            else
+                # Add to scene names list
+                scene_names+=($1)
+            fi
             shift
             ;;
     esac
@@ -182,7 +188,7 @@ done
 if [ ${#scene_names[@]} -eq 0 ]; then
     # Run all scenes if no scene names provided
     echo "Running all scenes with CUDA device $CUDA_DEVICE and iteration $ITERATION..."
-    for scene in jugs chair air_baloons hotdog; do
+    for scene in lego hotdog armadillo ficus; do
         run_all $scene
     done
 else
