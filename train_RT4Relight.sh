@@ -8,32 +8,35 @@
 
 # Configuration variables
 CUDA_DEVICE="0"  # Default CUDA device, can be overridden by --cuda_device argument
-DATASET_TYPE="TensoIR"
-DATASET_ROOT="/home/zjk/datasets/TensoIR"
-OUTPUT_ROOT="/home/zjk/code/GS-RTIR/outputs/TensoIR"
-ENVIRONMENT_MAPS="/home/zjk/datasets/TensoIR/Environment_Maps"
+DATASET_TYPE="RT4Relight"
+DATASET_ROOT="/home/zjk/datasets/RT4Relight"
+OUTPUT_ROOT="/home/zjk/code/GS-RTIR/outputs/RT4Relight"
+ENVIRONMENT_MAPS="/home/zjk/datasets/RT4Relight/Environment_Maps"
 ITERATION="799"  # Default iteration number, can be overridden by command line argument
 
 # Enable/disable switches for each step
-enable_refine=false
+enable_refine=true
 enable_train=true
 enable_render=true
 enable_metrics=true
-enable_relight=false  # Switch for relight functionality
+enable_relight=true  # Switch for relight functionality
 
 # Scene-specific parameters
 declare -A SCENE_PARAMS
-SCENE_PARAMS[lego,offset]="0.1"
-SCENE_PARAMS[lego,geometry_threshold]="0.2"
+SCENE_PARAMS[fruits,offset]="0.1"
+SCENE_PARAMS[fruits,geometry_threshold]="0.2"
 
-SCENE_PARAMS[hotdog,offset]="0.1"
-SCENE_PARAMS[hotdog,geometry_threshold]="0.2"
+SCENE_PARAMS[bread,offset]="0.05"
+SCENE_PARAMS[bread,geometry_threshold]="0.2"
 
-SCENE_PARAMS[armadillo,offset]="0.1"
-SCENE_PARAMS[armadillo,geometry_threshold]="0.2"
+SCENE_PARAMS[toybus,offset]="0.1"
+SCENE_PARAMS[toybus,geometry_threshold]="0.2"
 
-SCENE_PARAMS[ficus,offset]="0.1"
-SCENE_PARAMS[ficus,geometry_threshold]="0.2"
+SCENE_PARAMS[teacup,offset]="0.1"
+SCENE_PARAMS[teacup,geometry_threshold]="0.2"
+
+SCENE_PARAMS[bear,offset]="0.1"
+SCENE_PARAMS[bear,geometry_threshold]="0.2"
 
 # Function to run refine for a scene
 run_refine() {
