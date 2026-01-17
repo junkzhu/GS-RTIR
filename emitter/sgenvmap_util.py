@@ -30,10 +30,12 @@ def fibonacci_sphere(samples):
     return points
 
 def expm1(x, T = 0.3):
+    # Abalation study: Response Function
     x = dr.exp(x / T) - 1.0
     return x
 
 def expm1_np(x, T = 0.3):
+    # Abalation study: Response Function
     x = np.exp(x / T) - 1.0
     return x
 

@@ -48,7 +48,7 @@ class RefineSynthetic4Relight(RefineBase):
         fake_normal_loss = lnormal_sqr(dr.detach(fake_normal_img), normal_img, normal_mask_flat) / self.dataset.batch_size
         
         # Total loss
-        total_loss = view_loss + normal_priors_loss + normal_tv_loss + fake_normal_loss
+        total_loss = normal_priors_loss + normal_tv_loss + fake_normal_loss
         
         # Backward pass
         dr.backward(total_loss)

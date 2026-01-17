@@ -24,6 +24,12 @@ class ReparamIntegrator(mi.SamplingIntegrator):
         if self.selfocc_offset_max < 0:
             self.selfocc_offset_max = float(1e8)
 
+        #Abalation study: Global Illumination
+        #self.max_depth = 2
+
+        #Abalation study: Self-occ Avodiance
+        #self.selfocc_offset_max = 0.0
+
     
     def safe_normalize(self, v):
         n = dr.norm(v)
@@ -656,7 +662,7 @@ class ReparamIntegrator(mi.SamplingIntegrator):
 
         ray_depth = dr.select(D > seg_l, D - seg_l, 0.0)
 
-        #Abalation study: Geometry judgement
+        #Abalation study: Geometry Judgement
         #hit_active = ~ray_active
 
         return A, mi.Spectrum(R), mi.Spectrum(M), mi.Spectrum(D), N, hit_active, ray_active, weight_acc, ray_depth

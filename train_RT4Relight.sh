@@ -15,7 +15,7 @@ ENVIRONMENT_MAPS="/home/zjk/datasets/RT4Relight/Environment_Maps"
 ITERATION="799"  # Default iteration number, can be overridden by command line argument
 
 # Enable/disable switches for each step
-enable_refine=true
+enable_refine=false
 enable_train=true
 enable_render=true
 enable_metrics=true
@@ -32,7 +32,7 @@ SCENE_PARAMS[bread,geometry_threshold]="0.2"
 SCENE_PARAMS[toybus,offset]="0.1"
 SCENE_PARAMS[toybus,geometry_threshold]="0.2"
 
-SCENE_PARAMS[teacup,offset]="0.1"
+SCENE_PARAMS[teacup,offset]="0.2"
 SCENE_PARAMS[teacup,geometry_threshold]="0.2"
 
 SCENE_PARAMS[bear,offset]="0.1"
