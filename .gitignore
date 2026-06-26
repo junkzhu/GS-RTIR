@@ -1,0 +1,17 @@
+
+/.vscode
+/.vs
+
+__pycache__
+*.pyc
+
+outputs
+
+*.pth
+*.ply
+*.exr
+
+emitter/output
+emitter/SGEmitter.py
+
+*.out

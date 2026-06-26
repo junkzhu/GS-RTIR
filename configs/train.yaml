@@ -1,0 +1,41 @@
+optimizer:
+  iterations: 800
+  
+  # optimizer parameters
+  params:
+    centers_lr: 0.0
+    scales_lr: 0.0
+    quats_lr: 0.0
+    normals_lr: 1e-6
+
+    opacities_lr: 0.0
+    albedos_lr: 0.02
+    roughnesses_lr: 0.02
+    metallics_lr: 0.0
+
+    envmap:
+      sg_lobe_lr: 0.02
+      sg_lambda_lr: 0.02
+      sg_mu_lr: 0.02
+
+      data_lr: 0.02
+
+  # warmup config
+  warmup_iterations: 200
+  loss_weights:
+    warmup:
+      view: 1.0
+      normal: 0.1
+      tv: 0.01
+      priors: 1.0
+      sgreg: 1.0
+    standard:
+      view: 1.0
+      normal: 0.1
+      tv: 0.01
+      priors: 0.05
+      sgreg: 1.0
+
+  scheduler:
+    type: cosine
+    min_factor: 0.5
